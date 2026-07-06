@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { login } from '../utils/storage';
+import { signIn } from '../utils/firebaseClient';
+import { translateAuthError } from '../utils/authErrors';
+import { ADMIN_EMAIL } from '../utils/constants';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -10,7 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password || isSubmitting) return;
@@ -18,12 +20,11 @@ export default function LoginPage() {
     setError('');
     setIsSubmitting(true);
 
-    const result = login(trimmedEmail, password);
-
-    if (result.success) {
-      navigate(result.user.role === 'admin' ? '/admin' : '/');
-    } else {
-      setError(result.error || 'No pudimos iniciar tu sesión.');
+    try {
+      const user = await signIn(trimmedEmail, password);
+      navigate(user.email === ADMIN_EMAIL ? '/admin' : '/');
+    } catch (err) {
+      setError(translateAuthError(err));
       setIsSubmitting(false);
     }
   };

@@ -1,13 +1,14 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { getCurrentUser, logout } from '../utils/storage';
+import { useAuth } from '../context/AuthContext';
+import { signOutUser } from '../utils/firebaseClient';
 
 export default function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === '/';
+  const { user } = useAuth();
 
-  const [user, setUser] = useState(() => getCurrentUser());
   const [isDarkMode, setIsDarkMode] = useState(() => (
     localStorage.getItem('letrasdepaz_dark') === 'true' ||
     (!('letrasdepaz_dark' in localStorage) &&
@@ -18,22 +19,14 @@ export default function Header() {
     document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setUser(getCurrentUser());
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [location.pathname]);
-
   const toggleDarkMode = () => {
     const newDark = !isDarkMode;
     setIsDarkMode(newDark);
     localStorage.setItem('letrasdepaz_dark', newDark);
   };
 
-  const handleLogout = () => {
-    logout();
-    setUser(null);
+  const handleLogout = async () => {
+    await signOutUser();
     navigate('/');
   };
 
@@ -46,7 +39,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 glass transition-all duration-300 mb-10">
-      <div className="max-w-8xl mx-auto p-10 page-padding flex items-center justify-between gap-4" style={{ "padding-left": "15px", "padding-right": "15px", "padding-top": "0px", "padding-bottom": "0px", "margin-top": "10px", "margin-bottom": "10px" }} >
+      <div className="max-w-8xl mx-auto p-10 page-padding flex items-center justify-between gap-4" style={{ paddingLeft: '15px', paddingRight: '15px', paddingTop: '0px', paddingBottom: '0px', marginTop: '10px', marginBottom: '10px' }}>
         <Link to="/" className="group flex items-center gap-3 no-underline shrink-0" id="header-logo">
           <img src="/assets/Logo_Letras_de_Paz.png" alt="Letras de Paz" className="h-9 w-9 object-contain rounded-full shadow-[0_10px_24px_-14px_rgba(31,37,32,0.75)] transition-transform duration-300 group-hover:-rotate-6" />
           <h1 className="font-poem text-2xl md:text-[30px] font-semibold text-ink tracking-normal leading-none">
@@ -81,15 +74,14 @@ export default function Header() {
 
           {user ? (
             <>
-              {user.role === 'admin' ? (
+              {user.isAdmin && (
                 <Link to="/admin" className={navLinkClass(location.pathname === '/admin')}>
-                  Panel  
+                  Panel
                 </Link>
-              ) : (
-                <span className="hidden md:inline px-5 py-2 text-sm font-medium tracking-wide text-ink-light">
-                  Hola, {user.name}
-                </span>
               )}
+              <Link to="/perfil" className={navLinkClass(location.pathname === '/perfil')}>
+                Perfil
+              </Link>
               <button
                 onClick={handleLogout}
                 className="rounded-none px-4 py-2 text-sm font-medium tracking-wide uppercase transition-colors duration-300 text-ink-faint hover:text-red-500 cursor-pointer bg-transparent border-none"
