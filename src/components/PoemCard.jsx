@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getReactions } from '../utils/storage';
 
@@ -11,7 +12,16 @@ function formatDate(dateStr) {
 }
 
 export default function PoemCard({ poem, index }) {
-  const reactions = getReactions(poem.id);
+  const [reactions, setReactions] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    getReactions(poem.id).then((data) => {
+      if (!cancelled) setReactions(data);
+    });
+    return () => { cancelled = true; };
+  }, [poem.id]);
+
   const totalReactions = Object.values(reactions).reduce((sum, n) => sum + n, 0);
   const topEmojis = Object.entries(reactions)
     .sort((a, b) => b[1] - a[1])

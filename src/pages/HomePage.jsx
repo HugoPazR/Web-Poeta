@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { samplePoems } from '../data/poems';
-import { getCustomPoems } from '../utils/storage';
+import { getCustomPoems, sortPoemsByNewest } from '../utils/storage';
 import PoemCard from '../components/PoemCard';
 
 const DAYS_FOR_NEW_BADGE = 7;
@@ -8,12 +8,18 @@ const DAYS_FOR_NEW_BADGE = 7;
 export default function HomePage() {
   const [query, setQuery] = useState('');
   const [now] = useState(() => Date.now());
+  const [allPoems, setAllPoems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const allPoems = useMemo(() => {
-    const customPoems = getCustomPoems();
-    return [...customPoems, ...samplePoems].sort(
-      (a, b) => new Date(b.date) - new Date(a.date)
-    );
+  useEffect(() => {
+    let cancelled = false;
+    getCustomPoems().then((customPoems) => {
+      if (cancelled) return;
+      const combined = sortPoemsByNewest([...customPoems, ...samplePoems]);
+      setAllPoems(combined);
+      setIsLoading(false);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const featured = allPoems[0];
@@ -37,7 +43,7 @@ export default function HomePage() {
         <div className="max-w-8xl mx-auto px-8 pt-18 md:pt-24 pb-12 md:pb-16 page-padding">
           <div className="grid lg:grid-cols-[1.08fr_0.92fr] gap-10 lg:gap-14 items-center">
             <div className="animate-fade-in-up">
-              <h1 class="font-poem text-[50px] sm:text-[68px] lg:text-[86px] font-semibold text-ink leading-[0.92] tracking-normal max-w-3xl" style={{"padding-bottom": "0px", "margin-bottom": "15px"}}>
+              <h1 className="font-poem text-[50px] sm:text-[68px] lg:text-[86px] font-semibold text-ink leading-[0.92] tracking-normal max-w-3xl" style={{ paddingBottom: '0px', marginBottom: '15px' }}>
                 Versos para leer despacio.
               </h1>
               <p className="mt-7 max-w-xl text-[16px] md:text-[18px] leading-8 text-ink-muted font-sans">
@@ -89,7 +95,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="max-w-8xl mx-auto px-10 page-padding py-10 md:py-12"style={{ "padding-left": "48px", "padding-right": "48px", "padding-top": "30px", "padding-bottom": "30px"}}>
+      <section className="max-w-8xl mx-auto px-10 page-padding py-10 md:py-12" style={{ paddingLeft: '48px', paddingRight: '48px', paddingTop: '30px', paddingBottom: '30px' }}>
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
           <div>
             <p className="text-[11px] tracking-[0.18em] uppercase text-sage font-semibold font-sans mb-3">
@@ -139,7 +145,11 @@ export default function HomePage() {
           </div>
         </div>
 
-        {visiblePoems.length > 0 ? (
+        {isLoading ? (
+          <div className="pb-24 text-center animate-fade-in">
+            <p className="font-poem text-xl text-ink-faint italic">Cargando poemas...</p>
+          </div>
+        ) : visiblePoems.length > 0 ? (
           <ul id="poems-list" className="poems-list pb-24">
             {visiblePoems.map((poem, i) => (
               <li key={poem.id} className="poem-list-item relative">

@@ -1,25 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  addCustomPoem, 
-  getCustomPoems, 
+import {
+  addCustomPoem,
+  getCustomPoems,
   deleteCustomPoem,
-  logout,
-  isLoggedIn,
-  getCurrentUser,
   getAllComments,
   deleteComment,
   getReactionLog,
   getAllViews,
-  getPoemTitle
+  getPoemTitle,
+  sortPoemsByNewest
 } from '../utils/storage';
 import { samplePoems } from '../data/poems';
+import { useAuth } from '../context/AuthContext';
+import { signOutUser } from '../utils/firebaseClient';
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  // Auth state
-  const [authenticated, setAuthenticated] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user, loading: authLoading } = useAuth();
 
   // Dashboard state
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'write'
@@ -39,41 +37,41 @@ export default function AdminPage() {
   const [commentSearch, setCommentSearch] = useState('');
   const [chartRange, setChartRange] = useState(30); // days for the time-series chart
 
-  const loadData = () => {
-    setCustomPoems(getCustomPoems());
-    setComments(getAllComments());
-    setReactions(getReactionLog().reverse()); // Newest first
-    setViews(getAllViews());
+  const loadData = async () => {
+    const [customPoemsData, commentsData, reactionLogData, viewsData] = await Promise.all([
+      getCustomPoems(),
+      getAllComments(),
+      getReactionLog(),
+      getAllViews(),
+    ]);
+    setCustomPoems(customPoemsData);
+    setComments(commentsData);
+    setReactions(reactionLogData.slice().reverse()); // Newest first
+    setViews(viewsData);
     setIsLoadingData(false);
   };
 
   useEffect(() => {
-    const isAuth = isLoggedIn();
-    const user = getCurrentUser();
-    
-    if (!isAuth || !user || user.role !== 'admin') {
+    if (authLoading) return;
+    if (!user || !user.isAdmin) {
       navigate('/login');
     } else {
-      const frame = window.requestAnimationFrame(() => {
-        setAuthenticated(true);
-        setIsAdmin(true);
-        loadData();
-      });
-      return () => window.cancelAnimationFrame(frame);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch dashboard data once auth resolves
+      loadData();
     }
-  }, [navigate]);
+  }, [authLoading, user, navigate]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await signOutUser();
     navigate('/');
   };
 
-  const handlePublish = (e) => {
+  const handlePublish = async (e) => {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
 
-    addCustomPoem({ title, body, excerpt: excerpt.trim() || undefined });
-    loadData();
+    await addCustomPoem({ title, body, excerpt: excerpt.trim() || undefined });
+    await loadData();
     setTitle('');
     setBody('');
     setExcerpt('');
@@ -82,21 +80,21 @@ export default function AdminPage() {
     setActiveTab('dashboard');
   };
 
-  const handleDeletePoem = (id) => {
+  const handleDeletePoem = async (id) => {
     if (window.confirm('¿Seguro que quieres eliminar este poema?')) {
-      deleteCustomPoem(id);
-      loadData();
+      await deleteCustomPoem(id);
+      await loadData();
     }
   };
 
-  const handleDeleteComment = (poemId, commentId) => {
+  const handleDeleteComment = async (poemId, commentId) => {
     if (window.confirm('¿Eliminar este comentario?')) {
-      deleteComment(poemId, commentId);
-      loadData();
+      await deleteComment(poemId, commentId);
+      await loadData();
     }
   };
 
-  if (!authenticated || !isAdmin) {
+  if (authLoading || !user || !user.isAdmin) {
     return null; // Let the useEffect redirect handle this
   }
 
@@ -110,13 +108,16 @@ export default function AdminPage() {
       )
     : comments;
 
+  // Combined poems (custom + sample) for looking up titles by id
+  const allPoemsForTitles = [...customPoems, ...samplePoems];
+
   // Top poems by views
   const topPoems = Object.entries(views)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([id, count]) => ({
       id,
-      title: getPoemTitle(id, samplePoems),
+      title: getPoemTitle(id, allPoemsForTitles),
       views: count
     }));
 
@@ -162,7 +163,7 @@ export default function AdminPage() {
 
   return (
     <main className="bg-parchment min-h-screen">
-      <div className="max-w-8xl mx-auto px-10 page-padding py-14 md:py-20 animate-fade-in"style={{ "padding-left": "48px", "padding-right": "48px", "padding-top": "30px", "padding-bottom": "30px"}}>
+      <div className="max-w-8xl mx-auto px-10 page-padding py-14 md:py-20 animate-fade-in" style={{ paddingLeft: '48px', paddingRight: '48px', paddingTop: '30px', paddingBottom: '30px' }}>
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14 pb-8 border-b border-border">
         <div>
@@ -284,7 +285,7 @@ export default function AdminPage() {
                     </div>
                     <p className="font-poem italic text-ink-light mb-1.5">&ldquo;{c.text}&rdquo;</p>
                     <p className="text-xs text-ink-faint font-sans">
-                      En: <span className="italic">{getPoemTitle(c.poemId, samplePoems)}</span>
+                      En: <span className="italic">{getPoemTitle(c.poemId, allPoemsForTitles)}</span>
                     </p>
                   </div>
                 ))}
@@ -302,7 +303,7 @@ export default function AdminPage() {
                 <h3 className="font-poem text-xl mb-5 text-ink">
                   Poemas Más Leídos
                 </h3>
-                <div className="space-y-3"style={{ "padding-left": "15px", "padding-right": "15px", "padding-top": "10px", "padding-bottom": "10px"}}>
+                <div className="space-y-3" style={{ paddingLeft: '15px', paddingRight: '15px', paddingTop: '10px', paddingBottom: '10px' }}>
                   {topPoems.map((p) => (
                     <div key={p.id} className="flex justify-between items-center text-sm font-sans">
                       <span className="text-ink-light truncate pr-4">
@@ -324,7 +325,7 @@ export default function AdminPage() {
                 </h3>
                 <div className="flex flex-wrap gap-2 max-h-[200px] overflow-y-auto">
                   {reactions.slice(0, 30).map((r, i) => (
-                    <div key={i} className="flex items-center gap-1.5 bg-parchment border border-border px-3 py-1.5 rounded-full text-sm" title={`En: ${getPoemTitle(r.poemId, samplePoems)}`}>
+                    <div key={i} className="flex items-center gap-1.5 bg-parchment border border-border px-3 py-1.5 rounded-full text-sm" title={`En: ${getPoemTitle(r.poemId, allPoemsForTitles)}`}>
                       <span>{r.emoji}</span>
                     </div>
                   ))}
@@ -342,7 +343,7 @@ export default function AdminPage() {
             <div className="bg-white border border-border rounded-[6px] overflow-hidden">
               {customPoems.length > 0 ? (
                 <div className="divide-y divide-border-light">
-                  {customPoems.sort((a, b) => new Date(b.date) - new Date(a.date)).map((poem) => (
+                  {sortPoemsByNewest(customPoems).map((poem) => (
                     <div key={poem.id} className="flex items-center justify-between p-5 hover:bg-parchment-warm transition-colors duration-200">
                       <div className="flex-1 cursor-pointer min-w-0" onClick={() => navigate(`/poema/${poem.id}`)}>
                         <h4 className="font-poem text-lg text-ink hover:text-accent transition-colors truncate">

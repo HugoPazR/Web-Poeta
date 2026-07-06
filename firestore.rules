@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'poeta@letrasdepaz.com';
+    }
+
+    // Poems, comments, reactions and views are the public content of this poetry site,
+    // so anyone can read them. Only the poet's own Firebase Auth account (verified via
+    // the signed ID token, not just a client-side check) may publish/delete poems or
+    // moderate comments.
+    match /poems/{poemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    match /reactions/{poemId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /reaction_log/{logId} {
+      allow read: if true;
+      allow create: if true;
+    }
+
+    match /views/{poemId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Each account can only read/write its own profile document.
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

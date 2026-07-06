@@ -1,20 +1,16 @@
-/**
- * Utility for persisting reactions, comments, views, and auth using localStorage.
- * Uses a 'shared: true' pattern so data persists across sessions.
- */
+// Utility for persisting reactions, comments, poems, and views.
+// Firestore is the source of truth for poems/comments/reactions/views (shared across visitors).
+// localStorage is kept as an offline cache/fallback for when Firebase isn't configured or a request fails.
+// Auth lives in Firebase Auth + the AuthContext (see src/context/AuthContext.jsx), not here.
 
 const STORAGE_KEY_REACTIONS = 'letrasdepaz_reactions';
 const STORAGE_KEY_COMMENTS = 'letrasdepaz_comments';
 const STORAGE_KEY_POEMS = 'letrasdepaz_custom_poems';
 const STORAGE_KEY_VIEWS = 'letrasdepaz_views';
-const STORAGE_KEY_AUTH = 'letrasdepaz_auth';
 const STORAGE_KEY_LAST_SEEN = 'letrasdepaz_last_seen';
 const STORAGE_KEY_USER_REACTIONS = 'letrasdepaz_user_reactions';
+const STORAGE_KEY_REACTION_LOG = 'letrasdepaz_reaction_log';
 const DEVICE_REACTIONS_KEY = '_device';
-const STORAGE_KEY_USERS = 'letrasdepaz_users';
-
-// The admin password — change this to your own
-const ADMIN_PASSWORD = 'poeta2026';
 
 function safeGetItem(key, fallback) {
   try {
@@ -33,227 +29,194 @@ function safeSetItem(key, value) {
   }
 }
 
-// Migrate any reactions stored under the anonymous/device bucket into a user's bucket
-function migrateDeviceReactionsToUser(user) {
-  if (!user || !user.id) return;
-  const all = safeGetItem(STORAGE_KEY_USER_REACTIONS, {});
-  const device = all[DEVICE_REACTIONS_KEY] || {};
-  if (!device || Object.keys(device).length === 0) return;
-  if (!all[user.id]) all[user.id] = {};
-  for (const [poemId, emoji] of Object.entries(device)) {
-    if (!all[user.id][poemId]) {
-      all[user.id][poemId] = emoji;
-    }
-  }
-  delete all[DEVICE_REACTIONS_KEY];
-  safeSetItem(STORAGE_KEY_USER_REACTIONS, all);
-}
-
-// ─── Auth ─────────────────────────────────────────────────────────
-
-export function registerUser(name, email, password) {
-  const users = safeGetItem(STORAGE_KEY_USERS, []);
-  if (users.find(u => u.email === email.trim().toLowerCase())) {
-    return { success: false, error: 'El correo ya está registrado.' };
-  }
-  const newUser = {
-    id: Date.now().toString(36),
-    name: name.trim(),
-    email: email.trim().toLowerCase(),
-    password,
-    role: 'user'
-  };
-  users.push(newUser);
-  safeSetItem(STORAGE_KEY_USERS, users);
-  
-  safeSetItem(STORAGE_KEY_AUTH, { loggedIn: true, user: newUser, timestamp: Date.now() });
-  migrateDeviceReactionsToUser(newUser);
-  return { success: true };
-}
-
-export function login(emailOrPassword, maybePassword) {
-  let email = '';
-  let password = '';
-  
-  if (arguments.length === 1) {
-    if (emailOrPassword === ADMIN_PASSWORD) {
-        const adminUser = { id: 'admin', name: 'El Poeta', email: 'poeta@letrasdepaz.com', role: 'admin' };
-        safeSetItem(STORAGE_KEY_AUTH, { loggedIn: true, user: adminUser, timestamp: Date.now() });
-        migrateDeviceReactionsToUser(adminUser);
-        return { success: true, user: adminUser };
-    }
-    return { success: false, error: 'Credenciales inválidas' };
-  } else {
-    email = emailOrPassword.trim().toLowerCase();
-    password = maybePassword;
-    
-    if (email === 'poeta@letrasdepaz.com' && password === ADMIN_PASSWORD) {
-        const adminUser = { id: 'admin', name: 'El Poeta', email: 'poeta@letrasdepaz.com', role: 'admin' };
-      safeSetItem(STORAGE_KEY_AUTH, { loggedIn: true, user: adminUser, timestamp: Date.now() });
-      migrateDeviceReactionsToUser(adminUser);
-      return { success: true, user: adminUser };
-    }
-    
-    const users = safeGetItem(STORAGE_KEY_USERS, []);
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-      safeSetItem(STORAGE_KEY_AUTH, { loggedIn: true, user, timestamp: Date.now() });
-      migrateDeviceReactionsToUser(user);
-      return { success: true, user };
-    }
-    return { success: false, error: 'Correo o contraseña incorrectos' };
+// Lazily import firebaseClient and only use it when a project is actually configured.
+let fbModulePromise = null;
+async function getFirebase() {
+  if (!fbModulePromise) fbModulePromise = import('./firebaseClient');
+  try {
+    const fb = await fbModulePromise;
+    const enabled = await fb.isEnabled();
+    return enabled ? fb : null;
+  } catch {
+    return null;
   }
 }
 
-export function logout() {
-  safeSetItem(STORAGE_KEY_AUTH, { loggedIn: false, user: null });
-}
+// Last seen
+export function getLastSeen() { return safeGetItem(STORAGE_KEY_LAST_SEEN, { comments: 0, reactions: 0 }); }
+export function updateLastSeen(type) { const lastSeen = getLastSeen(); lastSeen[type] = Date.now(); safeSetItem(STORAGE_KEY_LAST_SEEN, lastSeen); }
 
-export function isLoggedIn() {
-  const auth = safeGetItem(STORAGE_KEY_AUTH, { loggedIn: false });
-  return auth.loggedIn === true;
-}
-
-export function getCurrentUser() {
-  const auth = safeGetItem(STORAGE_KEY_AUTH, { loggedIn: false });
-  if (auth.loggedIn && auth.user) {
-    return auth.user;
+// Reactions (aggregate counts are shared via Firestore; which emoji *you* picked stays local per browser/user)
+export async function getReactions(poemId) {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const data = await fb.getDocData('reactions', poemId);
+      const counts = (data && data.counts) || {};
+      const all = safeGetItem(STORAGE_KEY_REACTIONS, {});
+      all[poemId] = counts;
+      safeSetItem(STORAGE_KEY_REACTIONS, all);
+      return counts;
+    } catch (e) {
+      console.warn('getReactions: Firestore fetch failed, using local cache', e);
+    }
   }
-  return null;
-}
-
-// ─── Last Seen (for "new" badges) ─────────────────────────────────
-
-export function getLastSeen() {
-  return safeGetItem(STORAGE_KEY_LAST_SEEN, {
-    comments: 0,
-    reactions: 0,
-  });
-}
-
-export function updateLastSeen(type) {
-  const lastSeen = getLastSeen();
-  lastSeen[type] = Date.now();
-  safeSetItem(STORAGE_KEY_LAST_SEEN, lastSeen);
-}
-
-// ─── Reactions ────────────────────────────────────────────────────
-
-export function getReactions(poemId) {
   const all = safeGetItem(STORAGE_KEY_REACTIONS, {});
   return all[poemId] || {};
 }
 
-export function getUserReaction(poemId) {
+// userId is the signed-in Firebase Auth uid, or undefined for anonymous visitors
+// (whose pick is remembered per-device instead).
+export function getUserReaction(poemId, userId) {
   const all = safeGetItem(STORAGE_KEY_USER_REACTIONS, {});
-
-  // Legacy format: root was a mapping poemId -> emoji (device-level)
-  if (all && typeof all[poemId] === 'string') {
-    // migrate into device bucket
-    const migrated = { [DEVICE_REACTIONS_KEY]: { ...all } };
-    safeSetItem(STORAGE_KEY_USER_REACTIONS, migrated);
-    return migrated[DEVICE_REACTIONS_KEY][poemId] || null;
-  }
-
-  const user = getCurrentUser();
-  if (user && user.id) {
-    return (all[user.id] && all[user.id][poemId]) || null;
-  }
+  if (all && typeof all[poemId] === 'string') { const migrated = { [DEVICE_REACTIONS_KEY]: { ...all } }; safeSetItem(STORAGE_KEY_USER_REACTIONS, migrated); return migrated[DEVICE_REACTIONS_KEY][poemId] || null; }
+  if (userId) return (all[userId] && all[userId][poemId]) || null;
   return (all[DEVICE_REACTIONS_KEY] && all[DEVICE_REACTIONS_KEY][poemId]) || null;
 }
-
-export function setUserReaction(poemId, emoji) {
+export function setUserReaction(poemId, emoji, userId) {
   const all = safeGetItem(STORAGE_KEY_USER_REACTIONS, {});
-
-  // If storage is in legacy shape (poemId -> emoji), migrate into device bucket
-  if (all && typeof all[poemId] === 'string') {
-    const migrated = { [DEVICE_REACTIONS_KEY]: { ...all } };
-    Object.assign(all, migrated);
-  }
-
-  const user = getCurrentUser();
-  if (user && user.id) {
-    if (!all[user.id]) all[user.id] = {};
-    all[user.id][poemId] = emoji;
-  } else {
-    if (!all[DEVICE_REACTIONS_KEY]) all[DEVICE_REACTIONS_KEY] = {};
-    all[DEVICE_REACTIONS_KEY][poemId] = emoji;
-  }
+  if (all && typeof all[poemId] === 'string') { const migrated = { [DEVICE_REACTIONS_KEY]: { ...all } }; Object.assign(all, migrated); }
+  if (userId) { if (!all[userId]) all[userId] = {}; all[userId][poemId] = emoji; }
+  else { if (!all[DEVICE_REACTIONS_KEY]) all[DEVICE_REACTIONS_KEY] = {}; all[DEVICE_REACTIONS_KEY][poemId] = emoji; }
   safeSetItem(STORAGE_KEY_USER_REACTIONS, all);
 }
 
-export function getAllReactions() {
+export async function getAllReactions() {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const docs = await fb.getCollection('reactions');
+      const out = {};
+      for (const d of docs) out[d.poemId || d.id] = d.counts || {};
+      return out;
+    } catch (e) {
+      console.warn('getAllReactions: Firestore fetch failed, using local cache', e);
+    }
+  }
   return safeGetItem(STORAGE_KEY_REACTIONS, {});
 }
 
-export function getReactionLog() {
-  return safeGetItem('letrasdepaz_reaction_log', []);
+export async function getReactionLog() {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const docs = await fb.getCollection('reaction_log');
+      return docs.sort((a, b) => a.timestamp - b.timestamp);
+    } catch (e) {
+      console.warn('getReactionLog: Firestore fetch failed, using local cache', e);
+    }
+  }
+  return safeGetItem(STORAGE_KEY_REACTION_LOG, []);
 }
 
-export function addReaction(poemId, emoji) {
+export async function addReaction(poemId, emoji, userId) {
+  const currentReaction = getUserReaction(poemId, userId);
+  if (currentReaction === emoji) return getReactions(poemId);
+
+  const deltas = { [emoji]: 1 };
+  if (currentReaction) deltas[currentReaction] = -1;
+
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      await fb.incrementFields('reactions', poemId, { counts: deltas });
+    } catch (e) {
+      console.error('addReaction: Firestore update failed', e);
+    }
+    try {
+      await fb.addDocData('reaction_log', { poemId, emoji, timestamp: Date.now() });
+    } catch { /* non-critical */ }
+  }
+
+  // local cache (used as fallback + immediate optimistic value if Firestore is unavailable)
   const all = safeGetItem(STORAGE_KEY_REACTIONS, {});
   if (!all[poemId]) all[poemId] = {};
-  
-  const currentReaction = getUserReaction(poemId);
-  if (currentReaction === emoji) {
-    // Already reacted with this emoji
-    return all[poemId];
-  }
-
-  // If user already reacted with a different emoji, decrement the old one
-  if (currentReaction && all[poemId][currentReaction] > 0) {
-    all[poemId][currentReaction]--;
-  }
-
-  // Increment the new emoji
+  if (currentReaction && all[poemId][currentReaction] > 0) all[poemId][currentReaction]--;
   all[poemId][emoji] = (all[poemId][emoji] || 0) + 1;
   safeSetItem(STORAGE_KEY_REACTIONS, all);
 
-  // Save user's choice
-  setUserReaction(poemId, emoji);
+  setUserReaction(poemId, emoji, userId);
 
-  // Log the reaction with timestamp for "new reactions" tracking
-  const log = safeGetItem('letrasdepaz_reaction_log', []);
+  const log = safeGetItem(STORAGE_KEY_REACTION_LOG, []);
   log.push({ poemId, emoji, timestamp: Date.now() });
-  // Keep only last 200 entries
   if (log.length > 200) log.splice(0, log.length - 200);
-  safeSetItem('letrasdepaz_reaction_log', log);
+  safeSetItem(STORAGE_KEY_REACTION_LOG, log);
 
-  return all[poemId];
+  return fb ? getReactions(poemId) : all[poemId];
 }
 
-// ─── Comments ─────────────────────────────────────────────────────
-
-export function getComments(poemId) {
+// Comments (shared via Firestore)
+export async function getComments(poemId) {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const docs = await fb.getCollectionWhere('comments', 'poemId', poemId);
+      const sorted = docs.sort((a, b) => b.timestamp - a.timestamp);
+      const localAll = safeGetItem(STORAGE_KEY_COMMENTS, {});
+      localAll[poemId] = sorted;
+      safeSetItem(STORAGE_KEY_COMMENTS, localAll);
+      return sorted;
+    } catch (e) {
+      console.warn('getComments: Firestore fetch failed, using local cache', e);
+    }
+  }
   const all = safeGetItem(STORAGE_KEY_COMMENTS, {});
   return (all[poemId] || []).sort((a, b) => b.timestamp - a.timestamp);
 }
 
-export function getAllComments() {
+export async function getAllComments() {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const docs = await fb.getCollection('comments');
+      return docs.sort((a, b) => b.timestamp - a.timestamp);
+    } catch (e) {
+      console.warn('getAllComments: Firestore fetch failed, using local cache', e);
+    }
+  }
   const all = safeGetItem(STORAGE_KEY_COMMENTS, {});
   const flat = [];
   for (const [poemId, comments] of Object.entries(all)) {
-    for (const c of comments) {
-      flat.push({ ...c, poemId });
-    }
+    for (const c of comments) flat.push({ ...c, poemId });
   }
   return flat.sort((a, b) => b.timestamp - a.timestamp);
 }
 
-export function addComment(poemId, { name, text }) {
-  const all = safeGetItem(STORAGE_KEY_COMMENTS, {});
-  if (!all[poemId]) all[poemId] = [];
-  all[poemId].push({
+export async function addComment(poemId, { name, text }) {
+  const comment = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    poemId,
     name: name?.trim() || 'Anónimo',
     text: text.trim(),
     timestamp: Date.now(),
-  });
+  };
+
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      await fb.setDocData('comments', `${poemId}_${comment.id}`, comment);
+    } catch (e) {
+      console.error('addComment: Firestore save failed', e);
+    }
+  }
+
+  const all = safeGetItem(STORAGE_KEY_COMMENTS, {});
+  if (!all[poemId]) all[poemId] = [];
+  all[poemId].push(comment);
   safeSetItem(STORAGE_KEY_COMMENTS, all);
-  return getComments(poemId);
+
+  return fb ? getComments(poemId) : getComments(poemId);
 }
 
-export function deleteComment(poemId, commentId) {
+export async function deleteComment(poemId, commentId) {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      await fb.deleteDocData('comments', `${poemId}_${commentId}`);
+    } catch (e) {
+      console.error('deleteComment: Firestore delete failed', e);
+    }
+  }
   const all = safeGetItem(STORAGE_KEY_COMMENTS, {});
   if (all[poemId]) {
     all[poemId] = all[poemId].filter(c => c.id !== commentId);
@@ -261,70 +224,134 @@ export function deleteComment(poemId, commentId) {
   }
 }
 
-// ─── Views ────────────────────────────────────────────────────────
-
-export function getViews(poemId) {
+// Views (shared via Firestore, atomic increment)
+export async function getViews(poemId) {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const data = await fb.getDocData('views', poemId);
+      const views = (data && data.views) || 0;
+      const all = safeGetItem(STORAGE_KEY_VIEWS, {});
+      all[poemId] = views;
+      safeSetItem(STORAGE_KEY_VIEWS, all);
+      return views;
+    } catch (e) {
+      console.warn('getViews: Firestore fetch failed, using local cache', e);
+    }
+  }
   const all = safeGetItem(STORAGE_KEY_VIEWS, {});
   return all[poemId] || 0;
 }
 
-export function getAllViews() {
+export async function getAllViews() {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const docs = await fb.getCollection('views');
+      const out = {};
+      for (const d of docs) out[d.poemId || d.id] = d.views || 0;
+      return out;
+    } catch (e) {
+      console.warn('getAllViews: Firestore fetch failed, using local cache', e);
+    }
+  }
   return safeGetItem(STORAGE_KEY_VIEWS, {});
 }
 
-export function addView(poemId) {
-  const all = safeGetItem(STORAGE_KEY_VIEWS, {});
-
-  // Prevent double-counting from rapid duplicate calls (e.g., React StrictMode double mount)
+export async function addView(poemId) {
   try {
     const key = `letrasdepaz_viewed_${poemId}`;
     const last = window.sessionStorage.getItem(key);
     const now = Date.now();
-    const thresholdMs = 3000; // don't recount if last count was within 3s
-    if (last && now - Number(last) < thresholdMs) {
-      return all[poemId] || 0;
-    }
+    const thresholdMs = 3000;
+    if (last && now - Number(last) < thresholdMs) return getViews(poemId);
     window.sessionStorage.setItem(key, String(now));
-  } catch (e) {
-    // sessionStorage might be unavailable; fall back to counting normally
+  } catch { /* sessionStorage unavailable, continue anyway */ }
+
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      await fb.incrementFields('views', poemId, { views: 1 });
+    } catch (e) {
+      console.error('addView: Firestore update failed', e);
+    }
   }
 
+  const all = safeGetItem(STORAGE_KEY_VIEWS, {});
   all[poemId] = (all[poemId] || 0) + 1;
   safeSetItem(STORAGE_KEY_VIEWS, all);
-  return all[poemId];
+
+  return fb ? getViews(poemId) : all[poemId];
 }
 
-// ─── Custom Poems (admin panel) ───────────────────────────────────
-
-export function getCustomPoems() {
+// Custom poems (shared via Firestore)
+export async function getCustomPoems() {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const poems = await fb.getCollection('poems');
+      const normalized = poems.map(p => ({ ...p, isCustom: true }));
+      safeSetItem(STORAGE_KEY_POEMS, normalized);
+      return normalized;
+    } catch (e) {
+      console.warn('getCustomPoems: Firestore fetch failed, using local cache', e);
+    }
+  }
   return safeGetItem(STORAGE_KEY_POEMS, []);
 }
 
-export function addCustomPoem({ title, body, excerpt }) {
-  const poems = getCustomPoems();
+export async function addCustomPoem({ title, body, excerpt }) {
   const newPoem = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     title: title.trim(),
     body: body.trim(),
     excerpt: excerpt?.trim() || body.trim().split('\n')[0].slice(0, 80) + '...',
     date: new Date().toISOString().split('T')[0],
+    // date only has day precision, so it can't order same-day poems — createdAt can.
+    createdAt: Date.now(),
     isCustom: true,
   };
+
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      await fb.setDocData('poems', newPoem.id, newPoem);
+    } catch (e) {
+      console.error('addCustomPoem: Firestore save failed — this poem will only be visible on this device until it syncs', e);
+    }
+  }
+
+  const poems = safeGetItem(STORAGE_KEY_POEMS, []);
   poems.push(newPoem);
   safeSetItem(STORAGE_KEY_POEMS, poems);
   return newPoem;
 }
 
-export function deleteCustomPoem(poemId) {
-  const poems = getCustomPoems().filter(p => p.id !== poemId);
+export async function deleteCustomPoem(poemId) {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      await fb.deleteDocData('poems', poemId);
+    } catch (e) {
+      console.error('deleteCustomPoem: Firestore delete failed', e);
+    }
+  }
+  const poems = safeGetItem(STORAGE_KEY_POEMS, []).filter(p => p.id !== poemId);
   safeSetItem(STORAGE_KEY_POEMS, poems);
   return poems;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────
-
-export function getPoemTitle(poemId, samplePoems) {
-  const allPoems = [...getCustomPoems(), ...samplePoems];
-  const poem = allPoems.find(p => p.id === poemId);
+// Helpers
+export function getPoemTitle(poemId, allPoems) {
+  const poem = allPoems.find((p) => p.id === poemId);
   return poem ? poem.title : 'Poema desconocido';
+}
+
+// Sample poems and older custom poems only have day-precision `date`, so same-day poems
+// need `createdAt` (ms precision) to break ties and sort newest-first correctly.
+function getPoemSortKey(poem) {
+  return poem.createdAt || new Date(poem.date).getTime();
+}
+export function sortPoemsByNewest(poems) {
+  return [...poems].sort((a, b) => getPoemSortKey(b) - getPoemSortKey(a));
 }

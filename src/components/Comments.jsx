@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { getComments, addComment, getCurrentUser } from '../utils/storage';
+import { useEffect, useState } from 'react';
+import { getComments, addComment } from '../utils/storage';
+import { useAuth } from '../context/AuthContext';
 
 function timeAgo(timestamp) {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -31,23 +32,38 @@ function getInitialColor(name) {
 }
 
 export default function Comments({ poemId }) {
-  const [comments, setComments] = useState(() => getComments(poemId));
-  const currentUser = getCurrentUser();
-  const [name, setName] = useState(currentUser ? currentUser.name : '');
+  const { user: currentUser } = useAuth();
+  const [comments, setComments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [name, setName] = useState('');
   const [text, setText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- prefill once Firebase auth resolves
+    if (currentUser) setName(currentUser.name);
+  }, [currentUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getComments(poemId).then((data) => {
+      if (cancelled) return;
+      setComments(data);
+      setIsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [poemId]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!text.trim()) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      const updated = addComment(poemId, { name, text });
+    addComment(poemId, { name, text }).then((updated) => {
       setComments(updated);
       setText('');
       setIsSubmitting(false);
-    }, 200);
+    });
   };
 
   return (
@@ -96,7 +112,11 @@ export default function Comments({ poemId }) {
       </form>
 
       <div className="space-y-0">
-        {comments.length === 0 ? (
+        {isLoading ? (
+          <p className="text-center text-ink-faint/80 text-base py-8 font-poem italic">
+            Cargando comentarios...
+          </p>
+        ) : comments.length === 0 ? (
           <p className="text-center text-ink-faint/80 text-base py-8 font-poem italic">
             Sé el primero en dejar un pensamiento...
           </p>

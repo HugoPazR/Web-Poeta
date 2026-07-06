@@ -1,7 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { samplePoems } from '../data/poems';
-import { getCustomPoems, addView } from '../utils/storage';
-import { useEffect } from 'react';
+import { getCustomPoems, addView, sortPoemsByNewest } from '../utils/storage';
+import { useEffect, useState } from 'react';
 import Reactions from '../components/Reactions';
 import Comments from '../components/Comments';
 
@@ -17,12 +17,29 @@ function formatDate(dateStr) {
 export default function PoemPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const allPoems = [...getCustomPoems(), ...samplePoems];
-  const poem = allPoems.find((p) => p.id === id);
+  const [allPoems, setAllPoems] = useState(null); // null while loading
+
+  useEffect(() => {
+    let cancelled = false;
+    getCustomPoems().then((customPoems) => {
+      if (!cancelled) setAllPoems([...customPoems, ...samplePoems]);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const poem = allPoems ? allPoems.find((p) => p.id === id) : null;
 
   useEffect(() => {
     if (poem) addView(poem.id);
   }, [poem]);
+
+  if (allPoems === null) {
+    return (
+      <main className="max-w-3xl mx-auto px-10 page-padding py-24 text-center animate-fade-in">
+        <p className="font-poem text-xl text-ink-faint italic">Cargando poema...</p>
+      </main>
+    );
+  }
 
   if (!poem) {
     return (
@@ -39,9 +56,7 @@ export default function PoemPage() {
     );
   }
 
-  const sortedPoems = [...allPoems].sort(
-    (a, b) => new Date(b.date) - new Date(a.date)
-  );
+  const sortedPoems = sortPoemsByNewest(allPoems);
   const currentIndex = sortedPoems.findIndex((p) => p.id === id);
   const prevPoem = sortedPoems[currentIndex - 1];
   const nextPoem = sortedPoems[currentIndex + 1];

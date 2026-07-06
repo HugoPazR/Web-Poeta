@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { registerUser } from '../utils/storage';
+import { signUp, setDocData } from '../utils/firebaseClient';
+import { translateAuthError } from '../utils/authErrors';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -8,16 +9,26 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !password) return;
+    if (!name.trim() || !email.trim() || !password || isSubmitting) return;
 
-    const result = registerUser(name, email, password);
-    if (result.success) {
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const firebaseUser = await signUp(email.trim(), password, name.trim());
+      await setDocData('users', firebaseUser.uid, {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        createdAt: Date.now(),
+      });
       navigate('/');
-    } else {
-      setError(result.error);
+    } catch (err) {
+      setError(translateAuthError(err));
+      setIsSubmitting(false);
     }
   };
 
@@ -87,10 +98,10 @@ export default function RegisterPage() {
           <div>
             <button
               type="submit"
-              disabled={!name.trim() || !email.trim() || !password}
+              disabled={!name.trim() || !email.trim() || !password || isSubmitting}
               className="btn-primary w-full px-5 py-3.5 rounded-md font-sans text-sm font-medium tracking-wide transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Crear cuenta
+              {isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}
             </button>
           </div>
 
