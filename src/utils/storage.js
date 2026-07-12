@@ -7,10 +7,16 @@ const STORAGE_KEY_REACTIONS = 'letrasdepaz_reactions';
 const STORAGE_KEY_COMMENTS = 'letrasdepaz_comments';
 const STORAGE_KEY_POEMS = 'letrasdepaz_custom_poems';
 const STORAGE_KEY_VIEWS = 'letrasdepaz_views';
+const STORAGE_KEY_VIEWS_DAILY = 'letrasdepaz_views_daily';
 const STORAGE_KEY_LAST_SEEN = 'letrasdepaz_last_seen';
 const STORAGE_KEY_USER_REACTIONS = 'letrasdepaz_user_reactions';
 const STORAGE_KEY_REACTION_LOG = 'letrasdepaz_reaction_log';
 const DEVICE_REACTIONS_KEY = '_device';
+
+// YYYY-MM-DD in the visitor's local timezone.
+function todayDateStr() {
+  return new Date().toLocaleDateString('en-CA');
+}
 
 function safeGetItem(key, fallback) {
   try {
@@ -264,6 +270,27 @@ export async function getAllViews() {
   return safeGetItem(STORAGE_KEY_VIEWS, {});
 }
 
+// Real per-day totals (summed across all poems) since tracking started, for the
+// "Lecturas en el tiempo" chart. Days before this feature shipped have no data.
+export async function getDailyViewTotals() {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const docs = await fb.getCollection('views_daily');
+      const out = {};
+      for (const d of docs) {
+        if (!d.date) continue;
+        out[d.date] = (out[d.date] || 0) + (d.views || 0);
+      }
+      safeSetItem(STORAGE_KEY_VIEWS_DAILY, out);
+      return out;
+    } catch (e) {
+      console.warn('getDailyViewTotals: Firestore fetch failed, using local cache', e);
+    }
+  }
+  return safeGetItem(STORAGE_KEY_VIEWS_DAILY, {});
+}
+
 export async function addView(poemId) {
   try {
     const key = `letrasdepaz_viewed_${poemId}`;
@@ -274,6 +301,8 @@ export async function addView(poemId) {
     window.sessionStorage.setItem(key, String(now));
   } catch { /* sessionStorage unavailable, continue anyway */ }
 
+  const date = todayDateStr();
+
   const fb = await getFirebase();
   if (fb) {
     try {
@@ -281,11 +310,18 @@ export async function addView(poemId) {
     } catch (e) {
       console.error('addView: Firestore update failed', e);
     }
+    try {
+      await fb.incrementFields('views_daily', `${poemId}_${date}`, { poemId, date, views: 1 });
+    } catch { /* non-critical: only affects the "reads over time" chart */ }
   }
 
   const all = safeGetItem(STORAGE_KEY_VIEWS, {});
   all[poemId] = (all[poemId] || 0) + 1;
   safeSetItem(STORAGE_KEY_VIEWS, all);
+
+  const dailyAll = safeGetItem(STORAGE_KEY_VIEWS_DAILY, {});
+  dailyAll[date] = (dailyAll[date] || 0) + 1;
+  safeSetItem(STORAGE_KEY_VIEWS_DAILY, dailyAll);
 
   return fb ? getViews(poemId) : all[poemId];
 }

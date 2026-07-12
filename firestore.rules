@@ -50,6 +50,16 @@ service cloud.firestore {
         && data.views < 100000000;
     }
 
+    // Matches { poemId, date, views } from storage.js's addView() daily bucket write.
+    // The doc id must be "<poemId>_<date>", which is what the client always sets it to.
+    function isValidViewsDaily(data, id) {
+      return data.keys().hasOnly(['poemId', 'date', 'views'])
+        && data.poemId is string && data.poemId.size() > 0 && data.poemId.size() <= 100
+        && data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.views is number && data.views >= 0 && data.views < 100000000
+        && id == (data.poemId + '_' + data.date);
+    }
+
     // Matches { email, createdAt } from storage.js's subscribeToNewsletter(). The doc id
     // must equal the email itself, which is what the client always sets it to.
     function isValidSubscriber(data, id) {
@@ -87,6 +97,11 @@ service cloud.firestore {
     match /views/{poemId} {
       allow read: if true;
       allow write: if isValidViews(request.resource.data);
+    }
+
+    match /views_daily/{entryId} {
+      allow read: if true;
+      allow write: if isValidViewsDaily(request.resource.data, entryId);
     }
 
     // Each account can only read/write its own profile document.

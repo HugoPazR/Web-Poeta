@@ -7,7 +7,9 @@ import {
   getAllComments,
   deleteComment,
   getReactionLog,
+  getAllReactions,
   getAllViews,
+  getDailyViewTotals,
   getPoemTitle,
   sortPoemsByNewest,
   getSubscribers,
@@ -36,7 +38,9 @@ export default function AdminPage() {
   // Stats state
   const [comments, setComments] = useState([]);
   const [reactions, setReactions] = useState([]);
+  const [reactionCounts, setReactionCounts] = useState({});
   const [views, setViews] = useState({});
+  const [dailyViewTotals, setDailyViewTotals] = useState({});
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [commentSearch, setCommentSearch] = useState('');
   const [chartRange, setChartRange] = useState(30); // days for the time-series chart
@@ -46,17 +50,21 @@ export default function AdminPage() {
   const [notifyStatus, setNotifyStatus] = useState(null);
 
   const loadData = async () => {
-    const [customPoemsData, commentsData, reactionLogData, viewsData, subscribersData] = await Promise.all([
+    const [customPoemsData, commentsData, reactionLogData, reactionCountsData, viewsData, dailyViewTotalsData, subscribersData] = await Promise.all([
       getCustomPoems(),
       getAllComments(),
       getReactionLog(),
+      getAllReactions(),
       getAllViews(),
+      getDailyViewTotals(),
       getSubscribers(),
     ]);
     setCustomPoems(customPoemsData);
     setComments(commentsData);
     setReactions(reactionLogData.slice().reverse()); // Newest first
+    setReactionCounts(reactionCountsData);
     setViews(viewsData);
+    setDailyViewTotals(dailyViewTotalsData);
     setSubscribers(subscribersData);
     setIsLoadingData(false);
   };
@@ -171,43 +179,52 @@ export default function AdminPage() {
       views: count
     }));
 
-  // Helper: generate a deterministic time series from a total value
-  const generateSeries = (total, days) => {
-    const out = new Array(days).fill(0);
-    if (!total || total <= 0) return out;
-    const seed = Number(String(total).slice(-3)) || 42;
-    const weights = [];
-    let sum = 0;
-    for (let i = 0; i < days; i++) {
-      const w = Math.abs(Math.sin((i + seed) / Math.max(3, days / 6))) + 0.5 + ((seed % 5) / 10);
-      weights.push(w);
-      sum += w;
-    }
-    let remaining = total;
-    for (let i = 0; i < days; i++) {
-      const v = i === days - 1 ? remaining : Math.max(0, Math.round((weights[i] / sum) * total));
-      out[i] = v;
-      remaining -= v;
+  // Real per-day series for the last `days` days (oldest first), from actual tracked totals.
+  // Days before daily tracking shipped simply have no recorded reads.
+  const buildDailySeries = (dailyTotals, days) => {
+    const out = [];
+    const today = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toLocaleDateString('en-CA');
+      out.push({ date: dateStr, value: dailyTotals[dateStr] || 0 });
     }
     return out;
   };
 
+  const formatShortDate = (dateStr) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  };
+
+  const chartSeries = buildDailySeries(dailyViewTotals, chartRange);
+
   const TimeSeriesChart = ({ data }) => {
     const width = 800; const height = 160; const pad = 12;
-    const max = Math.max(...data, 1);
+    const values = data.map((d) => d.value);
+    const max = Math.max(...values, 1);
     const stepX = (width - pad * 2) / Math.max(1, data.length - 1);
-    const points = data.map((v, i) => `${pad + i * stepX},${height - pad - (v / max) * (height - pad * 2)}`);
+    const points = values.map((v, i) => `${pad + i * stepX},${height - pad - (v / max) * (height - pad * 2)}`);
     const areaPath = `M ${pad},${height - pad} L ${points.join(' L ')} L ${pad + (data.length - 1) * stepX},${height - pad} Z`;
     const linePath = `M ${points.join(' L ')}`;
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-full">
-        <path d={areaPath} fill="#f1f1f1" opacity="0.12" />
-        <path d={linePath} fill="none" stroke="#e11d48" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        {/* small circles */}
-        {data.map((v, i) => (
-          <circle key={i} cx={pad + i * stepX} cy={height - pad - (v / max) * (height - pad * 2)} r={2.5} fill="#e11d48" />
-        ))}
-      </svg>
+      <div className="relative w-full h-full pb-4">
+        <div className="absolute top-0 left-0 text-[11px] font-sans text-ink-faint">{max}</div>
+        <div className="absolute bottom-4 left-0 text-[11px] font-sans text-ink-faint">0</div>
+        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height: 'calc(100% - 1rem)' }}>
+          <path d={areaPath} fill="#f1f1f1" opacity="0.12" />
+          <path d={linePath} fill="none" stroke="#e11d48" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          {/* small circles, each with a hover tooltip showing the exact date + count */}
+          {data.map(({ date, value }, i) => (
+            <circle key={date} cx={pad + i * stepX} cy={height - pad - (value / max) * (height - pad * 2)} r={2.5} fill="#e11d48">
+              <title>{formatShortDate(date)}: {value} lectura{value === 1 ? '' : 's'}</title>
+            </circle>
+          ))}
+        </svg>
+        <div className="absolute bottom-0 left-0 text-[11px] font-sans text-ink-faint">{formatShortDate(data[0].date)}</div>
+        <div className="absolute bottom-0 right-0 text-[11px] font-sans text-ink-faint">{formatShortDate(data[data.length - 1].date)}</div>
+      </div>
     );
   };
 
@@ -305,7 +322,7 @@ export default function AdminPage() {
             </div>
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Reacciones</h3>
-              <p className="text-4xl font-poem text-ink">{reactions.length}</p>
+              <p className="text-4xl font-poem text-ink">{Object.values(reactionCounts).reduce((sum, counts) => sum + Object.values(counts).reduce((s, n) => s + n, 0), 0)}</p>
             </div>
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Suscriptores</h3>
@@ -316,7 +333,12 @@ export default function AdminPage() {
           {/* Lecturas en el tiempo (chart) */}
           <div className="mt-2 bg-white border border-border rounded-[6px] p-6"style={{ marginTop: '10px', marginBottom: '10px' }}>
             <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-poem">Lecturas en el tiempo</h3>
+              <div>
+                <h3 className="text-lg font-poem">Lecturas en el tiempo</h3>
+                <p className="text-xs text-ink-faint font-sans mt-1">
+                  {chartSeries.reduce((a, b) => a + b.value, 0)} lectura{chartSeries.reduce((a, b) => a + b.value, 0) === 1 ? '' : 's'} en los últimos {chartRange} días
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setChartRange(7)} className={`px-3 py-1 rounded text-sm ${chartRange===7? 'bg-ink text-parchment':'text-ink-faint hover:text-ink'}`}>7d</button>
                 <button onClick={() => setChartRange(30)} className={`px-3 py-1 rounded text-sm ${chartRange===30? 'bg-ink text-parchment':'text-ink-faint hover:text-ink'}`}>30d</button>
@@ -324,7 +346,7 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="w-full h-40">
-              <TimeSeriesChart data={generateSeries(Object.values(views).reduce((a,b)=>a+b,0), chartRange)} />
+              <TimeSeriesChart data={chartSeries} />
             </div>
           </div>
 
