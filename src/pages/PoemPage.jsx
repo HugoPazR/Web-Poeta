@@ -88,7 +88,7 @@ export default function PoemPage() {
 
         <div className="editorial-rule mb-6 md:mb-8" />
 
-        <div className="poem-body max-w-3xl mb-8 md:mb-10 first-letter:text-6xl md:first-letter:text-7xl first-letter:font-poem first-letter:text-accent first-letter:mr-2 first-letter:float-left first-letter:leading-[0.8] first-letter:mt-2">
+        <div className="poem-body max-w-3xl mb-8 md:mb-10 first-letter:text-6xl md:first-letter:text-7xl first-letter:font-poem first-letter:text-accent first-letter:mr-1">
           {poem.body}
         </div>
 
