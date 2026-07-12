@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { reactionEmojis } from '../data/poems';
+import { reactionEmojis } from '../data/reactions';
 import { getReactions, addReaction, getUserReaction } from '../utils/storage';
 import { useAuth } from '../context/AuthContext';
 

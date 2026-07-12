@@ -355,3 +355,31 @@ function getPoemSortKey(poem) {
 export function sortPoemsByNewest(poems) {
   return [...poems].sort((a, b) => getPoemSortKey(b) - getPoemSortKey(a));
 }
+
+// Newsletter subscription. Doc id is the normalized email itself, so re-subscribing
+// just updates the timestamp instead of creating duplicates.
+export async function subscribeToNewsletter(email) {
+  const normalized = email.trim().toLowerCase();
+  const fb = await getFirebase();
+  if (!fb) throw new Error('No se pudo conectar. Intenta de nuevo más tarde.');
+  await fb.setDocData('subscribers', normalized, { email: normalized, createdAt: Date.now() });
+}
+
+// Admin-only (see firestore.rules): list/remove newsletter subscribers.
+export async function getSubscribers() {
+  const fb = await getFirebase();
+  if (!fb) return [];
+  try {
+    const docs = await fb.getCollection('subscribers');
+    return docs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  } catch (e) {
+    console.warn('getSubscribers: Firestore fetch failed', e);
+    return [];
+  }
+}
+
+export async function deleteSubscriber(email) {
+  const fb = await getFirebase();
+  if (!fb) return;
+  await fb.deleteDocData('subscribers', email);
+}

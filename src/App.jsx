@@ -7,8 +7,11 @@ import AdminPage from './pages/AdminPage';
 import AboutPage from './pages/AboutPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ProfilePage from './pages/ProfilePage';
+import ContactPage from './pages/ContactPage';
 import ScrollToTop from './components/ScrollToTop';
+import BackToTop from './components/BackToTop';
 import { AuthProvider } from './context/AuthContext';
 
 export default function App() {
@@ -27,11 +30,14 @@ export default function App() {
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/registro" element={<RegisterPage />} />
+              <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
               <Route path="/perfil" element={<ProfilePage />} />
+              <Route path="/contacto" element={<ContactPage />} />
             </Routes>
             </div>
           </div>
           <Footer />
+          <BackToTop />
         </div>
       </BrowserRouter>
     </AuthProvider>

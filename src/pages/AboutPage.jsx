@@ -1,7 +1,10 @@
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+
 export default function AboutPage() {
+  useDocumentTitle('Sobre mí');
   return (
-    <main className="max-w-6xl mx-auto m-10 px-10 page-padding py-14 md:py-20 animate-fade-in">
-      <section className="grid lg:grid-cols-[0.82fr_1.18fr] gap-10 lg:gap-16 items-center">
+    <main className="max-w-6xl mx-auto px-10 page-padding py-8 md:py-10 animate-fade-in">
+      <section className="grid lg:grid-cols-[0.82fr_1.18fr] gap-8 lg:gap-10 items-center">
         <div className="relative animate-fade-in-up">
           <div className="aspect-[4/5] overflow-hidden rounded-[8px] border border-border bg-white p-2 shadow-[0_34px_90px_-55px_rgba(31,37,32,0.72)]">
             <img
@@ -10,13 +13,13 @@ export default function AboutPage() {
               className="h-full w-full rounded-[6px] object-cover object-center"
             />
           </div>
-          <div className="absolute -bottom-5 right-5 rounded-[8px] bg-sage text-parchment px-5 py-4 shadow-[0_20px_48px_-30px_rgba(31,37,32,0.85)]" style={{ padding: '5px' }}>
+          <div className="absolute -bottom-5 right-5 rounded-[8px] bg-sage text-parchment px-5 py-4 shadow-[0_20px_48px_-30px_rgba(31,37,32,0.85)]">
             <p className="font-poem text-2xl leading-none">Letras de Paz</p>
             <p className="mt-1 text-[11px] uppercase tracking-[0.18em] opacity-80">Voz y memoria</p>
           </div>
         </div>
 
-        <div className="animate-fade-in-up delay-2 " style={{ marginTop: '20px', marginBottom: '20px' }}>
+        <div className="animate-fade-in-up delay-2">
           <p className="text-[11px] tracking-[0.2em] uppercase text-sage font-semibold font-sans mb-4">
             Sobre mí
           </p>
@@ -40,7 +43,7 @@ export default function AboutPage() {
             </p>
           </div>
 
-          <div className="mt-10 flex flex-wrap gap-3 justify-evenly" style={{ marginTop: '10px', marginBottom: '10px' }}>
+          <div className="mt-6 flex flex-wrap gap-3 justify-evenly">
             {[
               { name: 'X', url: 'https://x.com/hugopazrojas1', img: '/assets/X.png', imgAlt: 'X (Twitter)' },
               { name: 'Instagram', url: 'https://instagram.com/hugopazrojas', img: '/assets/Instagram.png', imgAlt: 'Instagram' },

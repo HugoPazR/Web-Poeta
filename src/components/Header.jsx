@@ -38,7 +38,7 @@ export default function Header() {
     }`;
 
   return (
-    <header className="sticky top-0 z-50 glass transition-all duration-300 mb-10">
+    <header className="sticky top-0 z-50 glass transition-all duration-300 mb-4">
       <div className="max-w-8xl mx-auto p-10 page-padding flex items-center justify-between gap-4" style={{ paddingLeft: '15px', paddingRight: '15px', paddingTop: '0px', paddingBottom: '0px', marginTop: '10px', marginBottom: '10px' }}>
         <Link to="/" className="group flex items-center gap-3 no-underline shrink-0" id="header-logo">
           <img src="/assets/Logo_Letras_de_Paz.png" alt="Letras de Paz" className="h-9 w-9 object-contain rounded-full shadow-[0_10px_24px_-14px_rgba(31,37,32,0.75)] transition-transform duration-300 group-hover:-rotate-6" />
@@ -69,7 +69,10 @@ export default function Header() {
             Poemas   
           </Link>
           <Link to="/sobre-mi" className={navLinkClass(location.pathname === '/sobre-mi')} id="nav-about">
-            Sobre mí  
+            Sobre mí
+          </Link>
+          <Link to="/contacto" className={navLinkClass(location.pathname === '/contacto')} id="nav-contact">
+            Contacto
           </Link>
 
           {user ? (

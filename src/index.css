@@ -54,36 +54,41 @@
 }
 
 /* ─── Base Styles ──────────────────────────────────────────────── */
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  
-}
+/* Wrapped in Tailwind's `base` layer so utilities (e.g. mx-auto) — which live in
+   the `utilities` layer, ordered after `base` — can still override these resets.
+   Unlayered CSS always beats layered CSS regardless of specificity, so leaving
+   this unlayered silently broke every `margin`/`padding` utility site-wide. */
+@layer base {
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-html {
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-body {
-  font-family: var(--font-sans);
-  background:
-    linear-gradient(90deg, rgba(31, 37, 32, 0.035) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(31, 37, 32, 0.025) 1px, transparent 1px),
-    radial-gradient(circle at 12% 0%, rgba(88, 107, 82, 0.13), transparent 28rem),
-    linear-gradient(180deg, var(--color-parchment), var(--color-parchment-warm));
-  background-size: 38px 38px, 38px 38px, auto, auto;
-  color: var(--color-ink);
-  line-height: 1.6;
-  min-height: 100vh;
-  transition: background-color 0.5s ease, color 0.5s ease;
-}
+  body {
+    font-family: var(--font-sans);
+    background:
+      linear-gradient(90deg, rgba(31, 37, 32, 0.035) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(31, 37, 32, 0.025) 1px, transparent 1px),
+      radial-gradient(circle at 12% 0%, rgba(88, 107, 82, 0.13), transparent 28rem),
+      linear-gradient(180deg, var(--color-parchment), var(--color-parchment-warm));
+    background-size: 38px 38px, 38px 38px, auto, auto;
+    color: var(--color-ink);
+    line-height: 1.6;
+    min-height: 100vh;
+    transition: background-color 0.5s ease, color 0.5s ease;
+  }
 
-::selection {
-  background-color: var(--color-accent-warm);
-  color: var(--color-white);
+  ::selection {
+    background-color: var(--color-accent-warm);
+    color: var(--color-white);
+  }
 }
 
 /* ─── Typography ───────────────────────────────────────────────── */

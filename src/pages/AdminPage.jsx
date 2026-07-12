@@ -9,13 +9,17 @@ import {
   getReactionLog,
   getAllViews,
   getPoemTitle,
-  sortPoemsByNewest
+  sortPoemsByNewest,
+  getSubscribers,
+  deleteSubscriber
 } from '../utils/storage';
-import { samplePoems } from '../data/poems';
 import { useAuth } from '../context/AuthContext';
 import { signOutUser } from '../utils/firebaseClient';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { hasNotifyConfig, notifySubscriber } from '../utils/emailClient';
 
 export default function AdminPage() {
+  useDocumentTitle('Panel');
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
@@ -36,18 +40,24 @@ export default function AdminPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [commentSearch, setCommentSearch] = useState('');
   const [chartRange, setChartRange] = useState(30); // days for the time-series chart
+  const [subscribers, setSubscribers] = useState([]);
+  const [copiedEmails, setCopiedEmails] = useState(false);
+  const [isNotifying, setIsNotifying] = useState(false);
+  const [notifyStatus, setNotifyStatus] = useState(null);
 
   const loadData = async () => {
-    const [customPoemsData, commentsData, reactionLogData, viewsData] = await Promise.all([
+    const [customPoemsData, commentsData, reactionLogData, viewsData, subscribersData] = await Promise.all([
       getCustomPoems(),
       getAllComments(),
       getReactionLog(),
       getAllViews(),
+      getSubscribers(),
     ]);
     setCustomPoems(customPoemsData);
     setComments(commentsData);
     setReactions(reactionLogData.slice().reverse()); // Newest first
     setViews(viewsData);
+    setSubscribers(subscribersData);
     setIsLoadingData(false);
   };
 
@@ -70,7 +80,7 @@ export default function AdminPage() {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
 
-    await addCustomPoem({ title, body, excerpt: excerpt.trim() || undefined });
+    const newPoem = await addCustomPoem({ title, body, excerpt: excerpt.trim() || undefined });
     await loadData();
     setTitle('');
     setBody('');
@@ -78,6 +88,28 @@ export default function AdminPage() {
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
     setActiveTab('dashboard');
+
+    // Best-effort: notify subscribers. Never blocks or fails the publish itself.
+    if (hasNotifyConfig() && subscribers.length > 0) {
+      setNotifyStatus(null);
+      setIsNotifying(true);
+      const poemInfo = {
+        title: newPoem.title,
+        excerpt: newPoem.excerpt,
+        url: `${window.location.origin}/poema/${newPoem.id}`,
+      };
+      let sent = 0;
+      for (const s of subscribers) {
+        try {
+          await notifySubscriber(s.email, poemInfo);
+          sent++;
+        } catch (err) {
+          console.error('notifySubscriber failed', s.email, err);
+        }
+      }
+      setIsNotifying(false);
+      setNotifyStatus({ sent, total: subscribers.length });
+    }
   };
 
   const handleDeletePoem = async (id) => {
@@ -91,6 +123,24 @@ export default function AdminPage() {
     if (window.confirm('¿Eliminar este comentario?')) {
       await deleteComment(poemId, commentId);
       await loadData();
+    }
+  };
+
+  const handleDeleteSubscriber = async (email) => {
+    if (window.confirm('¿Eliminar esta suscripción?')) {
+      await deleteSubscriber(email);
+      await loadData();
+    }
+  };
+
+  const handleCopyEmails = async () => {
+    const emails = subscribers.map((s) => s.email).join(', ');
+    try {
+      await navigator.clipboard.writeText(emails);
+      setCopiedEmails(true);
+      setTimeout(() => setCopiedEmails(false), 2000);
+    } catch {
+      /* clipboard API unavailable — nothing to fall back to here */
     }
   };
 
@@ -108,8 +158,8 @@ export default function AdminPage() {
       )
     : comments;
 
-  // Combined poems (custom + sample) for looking up titles by id
-  const allPoemsForTitles = [...customPoems, ...samplePoems];
+  // For looking up titles by id
+  const allPoemsForTitles = customPoems;
 
   // Top poems by views
   const topPoems = Object.entries(views)
@@ -163,9 +213,9 @@ export default function AdminPage() {
 
   return (
     <main className="bg-parchment min-h-screen">
-      <div className="max-w-8xl mx-auto px-10 page-padding py-14 md:py-20 animate-fade-in" style={{ paddingLeft: '48px', paddingRight: '48px', paddingTop: '30px', paddingBottom: '30px' }}>
+      <div className="max-w-8xl mx-auto px-10 page-padding py-6 md:py-8 animate-fade-in">
       {/* Header & Tabs */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-14 pb-8 border-b border-border">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 pb-4 border-b border-border">
         <div>
           <p className="font-sans text-xs tracking-[0.28em] uppercase text-accent mb-3">
             Letras de Paz · Estudio
@@ -207,10 +257,27 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {showSuccess && (
+      {(showSuccess || isNotifying || notifyStatus) && (
         <div className="mb-8 px-5 py-4 rounded-[4px] bg-white border border-accent/30 animate-slide-down">
           <p className="text-sm text-accent font-sans">
             Poema publicado exitosamente.
+          </p>
+          {isNotifying && (
+            <p className="text-xs text-ink-faint font-sans mt-1">Avisando a tus suscriptores...</p>
+          )}
+          {notifyStatus && (
+            <p className="text-xs text-ink-faint font-sans mt-1">
+              {notifyStatus.sent === notifyStatus.total
+                ? `Se avisó a ${notifyStatus.sent} de ${notifyStatus.total} suscriptores.`
+                : `Se avisó a ${notifyStatus.sent} de ${notifyStatus.total} suscriptores (algunos fallaron).`}
+            </p>
+          )}
+        </div>
+      )}
+      {!hasNotifyConfig() && subscribers.length > 0 && activeTab === 'write' && (
+        <div className="mb-8 px-5 py-4 rounded-[4px] bg-white border border-border">
+          <p className="text-xs text-ink-faint font-sans">
+            Tienes {subscribers.length} suscriptor{subscribers.length === 1 ? '' : 'es'}, pero el aviso automático de poema nuevo aún no está configurado (falta VITE_EMAILJS_NOTIFY_TEMPLATE_ID en tu .env.local).
           </p>
         </div>
       )}
@@ -226,7 +293,7 @@ export default function AdminPage() {
       {activeTab === 'dashboard' && (
         <div className="space-y-8 animate-fade-in">
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 justify-center text-center"style={{ marginTop: '10px', marginBottom: '10px' }}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 justify-center text-center">
             {/* Stats Cards */}
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Total Lecturas</h3>
@@ -239,6 +306,10 @@ export default function AdminPage() {
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Reacciones</h3>
               <p className="text-4xl font-poem text-ink">{reactions.length}</p>
+            </div>
+            <div className="bg-white border border-border rounded-[6px] p-6">
+              <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Suscriptores</h3>
+              <p className="text-4xl font-poem text-ink">{subscribers.length}</p>
             </div>
           </div>
 
@@ -374,6 +445,49 @@ export default function AdminPage() {
                   >
                     Escribir el primero
                   </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Newsletter subscribers */}
+          <section className="mt-14">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-poem text-2xl text-ink">
+                Suscriptores al boletín
+              </h3>
+              {subscribers.length > 0 && (
+                <button
+                  onClick={handleCopyEmails}
+                  className="text-xs text-ink-faint hover:text-accent px-3 py-1.5 border border-border hover:border-accent/40 rounded-[4px] transition-colors font-sans"
+                >
+                  {copiedEmails ? '¡Copiado!' : 'Copiar todos los correos'}
+                </button>
+              )}
+            </div>
+            <div className="bg-white border border-border rounded-[6px] overflow-hidden">
+              {subscribers.length > 0 ? (
+                <div className="divide-y divide-border-light max-h-[400px] overflow-y-auto">
+                  {subscribers.map((s) => (
+                    <div key={s.email} className="flex items-center justify-between p-4">
+                      <div className="min-w-0">
+                        <p className="text-sm text-ink truncate">{s.email}</p>
+                        <p className="text-xs text-ink-faint font-sans mt-0.5">
+                          {s.createdAt ? new Date(s.createdAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteSubscriber(s.email)}
+                        className="text-xs text-ink-faint hover:text-accent px-3 py-1.5 border border-border hover:border-accent/40 rounded-[4px] transition-colors font-sans shrink-0 ml-4"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-10 text-center text-ink-faint">
+                  <p className="font-poem italic">Aún no tienes suscriptores.</p>
                 </div>
               )}
             </div>
