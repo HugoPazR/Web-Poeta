@@ -9,8 +9,9 @@ import {
   getReactionLog,
   getAllReactions,
   getAllViews,
-  getDailyViewTotals,
+  getViewsDailyRaw,
   getPoemTitle,
+  getPoemSlug,
   sortPoemsByNewest,
   getSubscribers,
   deleteSubscriber
@@ -40,23 +41,28 @@ export default function AdminPage() {
   const [reactions, setReactions] = useState([]);
   const [reactionCounts, setReactionCounts] = useState({});
   const [views, setViews] = useState({});
-  const [dailyViewTotals, setDailyViewTotals] = useState({});
+  const [viewsDailyRaw, setViewsDailyRaw] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [commentSearch, setCommentSearch] = useState('');
   const [chartRange, setChartRange] = useState(30); // days for the time-series chart
   const [subscribers, setSubscribers] = useState([]);
+  const [monthlyMetric, setMonthlyMetric] = useState('lecturas'); // metric shown in the monthly bar chart
+  const [resumenYear, setResumenYear] = useState(() => new Date().getFullYear()); // year shown (Jan-Dec) in "Resumen mensual"
+  const [dashboardView, setDashboardView] = useState('historico'); // 'historico' | 'mensual'
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1); // 1-12
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [copiedEmails, setCopiedEmails] = useState(false);
   const [isNotifying, setIsNotifying] = useState(false);
   const [notifyStatus, setNotifyStatus] = useState(null);
 
   const loadData = async () => {
-    const [customPoemsData, commentsData, reactionLogData, reactionCountsData, viewsData, dailyViewTotalsData, subscribersData] = await Promise.all([
+    const [customPoemsData, commentsData, reactionLogData, reactionCountsData, viewsData, viewsDailyRawData, subscribersData] = await Promise.all([
       getCustomPoems(),
       getAllComments(),
       getReactionLog(),
       getAllReactions(),
       getAllViews(),
-      getDailyViewTotals(),
+      getViewsDailyRaw(),
       getSubscribers(),
     ]);
     setCustomPoems(customPoemsData);
@@ -64,7 +70,7 @@ export default function AdminPage() {
     setReactions(reactionLogData.slice().reverse()); // Newest first
     setReactionCounts(reactionCountsData);
     setViews(viewsData);
-    setDailyViewTotals(dailyViewTotalsData);
+    setViewsDailyRaw(viewsDailyRawData);
     setSubscribers(subscribersData);
     setIsLoadingData(false);
   };
@@ -104,7 +110,7 @@ export default function AdminPage() {
       const poemInfo = {
         title: newPoem.title,
         excerpt: newPoem.excerpt,
-        url: `${window.location.origin}/poema/${newPoem.id}`,
+        url: `${window.location.origin}/poema/${getPoemSlug(newPoem)}`,
       };
       let sent = 0;
       for (const s of subscribers) {
@@ -169,7 +175,7 @@ export default function AdminPage() {
   // For looking up titles by id
   const allPoemsForTitles = customPoems;
 
-  // Top poems by views
+  // Top poems by views (all-time)
   const topPoems = Object.entries(views)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
@@ -178,6 +184,51 @@ export default function AdminPage() {
       title: getPoemTitle(id, allPoemsForTitles),
       views: count
     }));
+
+  // Per-day totals (summed across all poems), derived from the raw per-poem records.
+  const dailyViewTotals = {};
+  for (const d of viewsDailyRaw) {
+    if (!d.date) continue;
+    dailyViewTotals[d.date] = (dailyViewTotals[d.date] || 0) + (d.views || 0);
+  }
+
+  // ─── "Por mes" filtering ───────────────────────────────────────────────
+  const isInSelectedMonth = (ts) => {
+    if (!ts) return false;
+    const d = new Date(ts);
+    return d.getFullYear() === selectedYear && d.getMonth() + 1 === selectedMonth;
+  };
+
+  const monthlyComments = comments.filter((c) => isInSelectedMonth(c.timestamp));
+  const monthlyReactionEvents = reactions.filter((r) => isInSelectedMonth(r.timestamp));
+  const monthlySubscribers = subscribers.filter((s) => isInSelectedMonth(s.createdAt));
+
+  const monthlyViewsByPoem = {};
+  for (const d of viewsDailyRaw) {
+    if (!d.date || !d.poemId) continue;
+    if (!isInSelectedMonth(new Date(`${d.date}T12:00:00`).getTime())) continue;
+    monthlyViewsByPoem[d.poemId] = (monthlyViewsByPoem[d.poemId] || 0) + (d.views || 0);
+  }
+  const monthlyTopPoems = Object.entries(monthlyViewsByPoem)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id, count]) => ({ id, title: getPoemTitle(id, allPoemsForTitles), views: count }));
+  const monthlyTotalViews = Object.values(monthlyViewsByPoem).reduce((a, b) => a + b, 0);
+
+  const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  const currentYear = new Date().getFullYear();
+  const earliestActivityYear = (() => {
+    const timestamps = [
+      ...comments.map((c) => c.timestamp),
+      ...reactions.map((r) => r.timestamp),
+      ...subscribers.map((s) => s.createdAt),
+    ].filter(Boolean);
+    if (!timestamps.length) return currentYear;
+    return new Date(Math.min(...timestamps)).getFullYear();
+  })();
+  const yearOptions = [];
+  for (let y = currentYear; y >= earliestActivityYear; y--) yearOptions.push(y);
 
   // Real per-day series for the last `days` days (oldest first), from actual tracked totals.
   // Days before daily tracking shipped simply have no recorded reads.
@@ -199,6 +250,25 @@ export default function AdminPage() {
   };
 
   const chartSeries = buildDailySeries(dailyViewTotals, chartRange);
+
+  // Real per-day series for one specific month (oldest first). Future months (relative to
+  // today) have no elapsed days yet, so they return an empty array.
+  const buildMonthDailySeries = (dailyTotals, year, month) => {
+    const today = new Date();
+    const isFutureMonth = year > today.getFullYear() || (year === today.getFullYear() && month > today.getMonth() + 1);
+    if (isFutureMonth) return [];
+    const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const lastDay = isCurrentMonth ? today.getDate() : daysInMonth;
+    const out = [];
+    for (let day = 1; day <= lastDay; day++) {
+      const dateStr = new Date(year, month - 1, day).toLocaleDateString('en-CA');
+      out.push({ date: dateStr, value: dailyTotals[dateStr] || 0 });
+    }
+    return out;
+  };
+
+  const monthlyDailySeries = buildMonthDailySeries(dailyViewTotals, selectedYear, selectedMonth);
 
   const TimeSeriesChart = ({ data }) => {
     const width = 800; const height = 160; const pad = 12;
@@ -224,6 +294,95 @@ export default function AdminPage() {
         </svg>
         <div className="absolute bottom-0 left-0 text-[11px] font-sans text-ink-faint">{formatShortDate(data[0].date)}</div>
         <div className="absolute bottom-0 right-0 text-[11px] font-sans text-ink-faint">{formatShortDate(data[data.length - 1].date)}</div>
+      </div>
+    );
+  };
+
+  // Monthly totals for a full year (January-December), built from real timestamped events.
+  // Comments, reactions and subscribers have always recorded timestamps, so their history
+  // goes back as far as those features have existed; views are only bucketed by day since
+  // the daily tracking feature shipped, so earlier months/years will show 0 there.
+  const monthKey = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const buildMonthlySeries = (events, year) => {
+    const totals = {};
+    events.forEach(({ timestamp, value }) => {
+      if (!timestamp) return;
+      const key = monthKey(timestamp);
+      totals[key] = (totals[key] || 0) + value;
+    });
+    const out = [];
+    for (let m = 0; m < 12; m++) {
+      const d = new Date(year, m, 1);
+      const key = `${year}-${String(m + 1).padStart(2, '0')}`;
+      out.push({
+        key,
+        shortLabel: d.toLocaleDateString('es-ES', { month: 'short' }).replace('.', ''),
+        fullLabel: d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
+        value: totals[key] || 0,
+      });
+    }
+    return out;
+  };
+
+  const monthlySeriesByMetric = {
+    lecturas: buildMonthlySeries(
+      Object.entries(dailyViewTotals).map(([date, count]) => ({ timestamp: new Date(`${date}T12:00:00`).getTime(), value: count })),
+      resumenYear
+    ),
+    comentarios: buildMonthlySeries(comments.map((c) => ({ timestamp: c.timestamp, value: 1 })), resumenYear),
+    reacciones: buildMonthlySeries(reactions.map((r) => ({ timestamp: r.timestamp, value: 1 })), resumenYear),
+    suscriptores: buildMonthlySeries(subscribers.map((s) => ({ timestamp: s.createdAt, value: 1 })), resumenYear),
+  };
+
+  const historicalTotals = {
+    lecturas: Object.values(views).reduce((a, b) => a + b, 0),
+    comentarios: comments.length,
+    reacciones: Object.values(reactionCounts).reduce((sum, counts) => sum + Object.values(counts).reduce((s, n) => s + n, 0), 0),
+    suscriptores: subscribers.length,
+  };
+
+  const monthlyMetricLabels = {
+    lecturas: 'Lecturas',
+    comentarios: 'Comentarios',
+    reacciones: 'Reacciones',
+    suscriptores: 'Suscriptores',
+  };
+
+  const monthlyMetricSingular = {
+    lecturas: 'lectura',
+    comentarios: 'comentario',
+    reacciones: 'reacción',
+    suscriptores: 'suscriptor',
+  };
+
+  const BarChart = ({ data, unitLabel }) => {
+    const width = 800; const height = 160; const pad = 12;
+    const max = Math.max(...data.map((d) => d.value), 1);
+    const gap = 6;
+    const barWidth = (width - pad * 2) / data.length - gap;
+    return (
+      <div className="relative w-full h-full pb-4">
+        <div className="absolute top-0 left-0 text-[11px] font-sans text-ink-faint">{max}</div>
+        <div className="absolute bottom-4 left-0 text-[11px] font-sans text-ink-faint">0</div>
+        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height: 'calc(100% - 1rem)' }}>
+          {data.map((d, i) => {
+            const barH = (d.value / max) * (height - pad * 2);
+            const x = pad + i * (barWidth + gap);
+            const y = height - pad - barH;
+            return (
+              <rect key={d.key} x={x} y={Math.max(0, y)} width={Math.max(0, barWidth)} height={Math.max(0, barH)} fill="#e11d48" rx={2}>
+                <title>{d.fullLabel}: {d.value} {unitLabel}</title>
+              </rect>
+            );
+          })}
+        </svg>
+        <div className="absolute bottom-0 left-0 right-0 flex justify-between text-[10px] font-sans text-ink-faint px-0.5">
+          {data.map((d) => <span key={d.key}>{d.shortLabel}</span>)}
+        </div>
       </div>
     );
   };
@@ -309,7 +468,29 @@ export default function AdminPage() {
       {/* ─── TAB: DASHBOARD ─── */}
       {activeTab === 'dashboard' && (
         <div className="space-y-8 animate-fade-in">
-          
+
+          {/* Histórico / Por mes toggle */}
+          <div className="flex bg-white border border-border rounded-[5px] p-1 w-fit">
+            <button
+              onClick={() => setDashboardView('historico')}
+              className={`px-4 py-1.5 rounded-[3px] text-sm font-sans font-medium transition-colors duration-200 ${
+                dashboardView === 'historico' ? 'bg-ink text-parchment' : 'text-ink-faint hover:text-ink'
+              }`}
+            >
+              Total histórico
+            </button>
+            <button
+              onClick={() => setDashboardView('mensual')}
+              className={`px-4 py-1.5 rounded-[3px] text-sm font-sans font-medium transition-colors duration-200 ${
+                dashboardView === 'mensual' ? 'bg-ink text-parchment' : 'text-ink-faint hover:text-ink'
+              }`}
+            >
+              Por mes
+            </button>
+          </div>
+
+          {dashboardView === 'historico' && (
+          <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5 justify-center text-center">
             {/* Stats Cards */}
             <div className="bg-white border border-border rounded-[6px] p-6">
@@ -342,11 +523,43 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <button onClick={() => setChartRange(7)} className={`px-3 py-1 rounded text-sm ${chartRange===7? 'bg-ink text-parchment':'text-ink-faint hover:text-ink'}`}>7d</button>
                 <button onClick={() => setChartRange(30)} className={`px-3 py-1 rounded text-sm ${chartRange===30? 'bg-ink text-parchment':'text-ink-faint hover:text-ink'}`}>30d</button>
-                <button onClick={() => setChartRange(90)} className={`px-3 py-1 rounded text-sm ${chartRange===90? 'bg-ink text-parchment':'text-ink-faint hover:text-ink'}`}>90d</button>
               </div>
             </div>
             <div className="w-full h-40">
               <TimeSeriesChart data={chartSeries} />
+            </div>
+          </div>
+
+          {/* Resumen mensual (bar chart) + total histórico */}
+          <div className="mt-2 bg-white border border-border rounded-[6px] p-6" style={{ marginTop: '10px', marginBottom: '10px' }}>
+            <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+              <div>
+                <h3 className="text-lg font-poem">Resumen mensual</h3>
+                <p className="text-xs text-ink-faint font-sans mt-1">
+                  {historicalTotals[monthlyMetric]} {historicalTotals[monthlyMetric] === 1 ? monthlyMetricSingular[monthlyMetric] : monthlyMetricLabels[monthlyMetric].toLowerCase()} en total histórico
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {Object.keys(monthlyMetricLabels).map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => setMonthlyMetric(key)}
+                    className={`px-3 py-1 rounded text-sm ${monthlyMetric === key ? 'bg-ink text-parchment' : 'text-ink-faint hover:text-ink'}`}
+                  >
+                    {monthlyMetricLabels[key]}
+                  </button>
+                ))}
+                <select
+                  value={resumenYear}
+                  onChange={(e) => setResumenYear(Number(e.target.value))}
+                  className="px-3 py-1.5 rounded-[4px] bg-white border border-border text-sm font-sans text-ink"
+                >
+                  {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="w-full h-40">
+              <BarChart data={monthlySeriesByMetric[monthlyMetric]} unitLabel={monthlyMetricLabels[monthlyMetric].toLowerCase()} />
             </div>
           </div>
 
@@ -427,6 +640,132 @@ export default function AdminPage() {
               </section>
             </div>
           </div>
+          </>
+          )}
+
+          {dashboardView === 'mensual' && (
+          <>
+          {/* Month + year picker */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="px-3 py-2 rounded-[4px] bg-white border border-border text-sm font-sans text-ink"
+            >
+              {MONTH_NAMES.map((name, i) => (
+                <option key={name} value={i + 1}>{name}</option>
+              ))}
+            </select>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="px-3 py-2 rounded-[4px] bg-white border border-border text-sm font-sans text-ink"
+            >
+              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 justify-center text-center">
+            <div className="bg-white border border-border rounded-[6px] p-6">
+              <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Lecturas</h3>
+              <p className="text-4xl font-poem text-ink">{monthlyTotalViews}</p>
+            </div>
+            <div className="bg-white border border-border rounded-[6px] p-6">
+              <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Comentarios</h3>
+              <p className="text-4xl font-poem text-ink">{monthlyComments.length}</p>
+            </div>
+            <div className="bg-white border border-border rounded-[6px] p-6">
+              <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Reacciones</h3>
+              <p className="text-4xl font-poem text-ink">{monthlyReactionEvents.length}</p>
+            </div>
+            <div className="bg-white border border-border rounded-[6px] p-6">
+              <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Suscriptores</h3>
+              <p className="text-4xl font-poem text-ink">{monthlySubscribers.length}</p>
+            </div>
+          </div>
+
+          {/* Lecturas en el tiempo, scoped to the selected month */}
+          <div className="bg-white border border-border rounded-[6px] p-6">
+            <div className="mb-4">
+              <h3 className="text-lg font-poem">Lecturas en el tiempo</h3>
+              <p className="text-xs text-ink-faint font-sans mt-1">
+                {monthlyTotalViews} lectura{monthlyTotalViews === 1 ? '' : 's'} en {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+              </p>
+            </div>
+            {monthlyDailySeries.length > 0 ? (
+              <div className="w-full h-40">
+                <TimeSeriesChart data={monthlyDailySeries} />
+              </div>
+            ) : (
+              <p className="text-sm text-ink-faint italic font-sans">Sin datos para este mes.</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
+            {/* Comments this month */}
+            <section className="bg-white border border-border rounded-[6px] p-6">
+              <h3 className="font-poem text-xl mb-5 text-ink">
+                Últimos Comentarios · {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+              </h3>
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                {monthlyComments.slice(0, 10).map((c) => (
+                  <div key={c.id} className="text-sm border-b border-border-light pb-4 last:border-0 last:pb-0">
+                    <div className="flex justify-between items-start mb-1.5">
+                      <span className="font-sans font-medium text-ink text-[13px]">{c.name}</span>
+                    </div>
+                    <p className="font-poem italic text-ink-light mb-1.5">&ldquo;{c.text}&rdquo;</p>
+                    <p className="text-xs text-ink-faint font-sans">
+                      En: <span className="italic">{getPoemTitle(c.poemId, allPoemsForTitles)}</span>
+                    </p>
+                  </div>
+                ))}
+                {monthlyComments.length === 0 && (
+                  <p className="text-sm text-ink-faint italic font-sans">Sin datos para este mes.</p>
+                )}
+              </div>
+            </section>
+
+            <div className="space-y-7">
+              {/* Top poems this month */}
+              <section className="bg-white border border-border rounded-[6px] p-6">
+                <h3 className="font-poem text-xl mb-5 text-ink">
+                  Poemas Más Leídos · {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+                </h3>
+                <div className="space-y-3">
+                  {monthlyTopPoems.map((p) => (
+                    <div key={p.id} className="flex justify-between items-center text-sm font-sans">
+                      <span className="text-ink-light truncate pr-4">{p.title}</span>
+                      <span className="font-medium bg-parchment-warm px-2.5 py-1 rounded-full text-xs text-ink-muted shrink-0">
+                        {p.views} lecturas
+                      </span>
+                    </div>
+                  ))}
+                  {monthlyTopPoems.length === 0 && (
+                    <p className="text-sm text-ink-faint italic font-sans">Sin datos para este mes.</p>
+                  )}
+                </div>
+              </section>
+
+              {/* Reactions this month */}
+              <section className="bg-white border border-border rounded-[6px] p-6">
+                <h3 className="font-poem text-xl mb-5 text-ink">
+                  Reacciones Recientes · {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+                </h3>
+                <div className="flex flex-wrap gap-2 max-h-[200px] overflow-y-auto">
+                  {monthlyReactionEvents.slice(0, 30).map((r, i) => (
+                    <div key={i} className="flex items-center gap-1.5 bg-parchment border border-border px-3 py-1.5 rounded-full text-sm" title={`En: ${getPoemTitle(r.poemId, allPoemsForTitles)}`}>
+                      <span>{r.emoji}</span>
+                    </div>
+                  ))}
+                  {monthlyReactionEvents.length === 0 && (
+                    <p className="text-sm text-ink-faint italic font-sans">Sin datos para este mes.</p>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+          </>
+          )}
 
           {/* Manage Poems */}
           <section className="mt-14">
@@ -438,7 +777,7 @@ export default function AdminPage() {
                 <div className="divide-y divide-border-light">
                   {sortPoemsByNewest(customPoems).map((poem) => (
                     <div key={poem.id} className="flex items-center justify-between p-5 hover:bg-parchment-warm transition-colors duration-200">
-                      <div className="flex-1 cursor-pointer min-w-0" onClick={() => navigate(`/poema/${poem.id}`)}>
+                      <div className="flex-1 cursor-pointer min-w-0" onClick={() => navigate(`/poema/${getPoemSlug(poem)}`)}>
                         <h4 className="font-poem text-lg text-ink hover:text-accent transition-colors truncate">
                           {poem.title}
                         </h4>

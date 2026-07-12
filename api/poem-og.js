@@ -16,15 +16,34 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
-async function fetchPoem(poemId) {
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/poems/${encodeURIComponent(poemId)}`;
+// Keep in sync with src/utils/slug.js — poems published before the slug field existed
+// don't have one stored, so their URL slug is derived from the title on the fly.
+function slugify(text) {
+  return String(text)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+// The route param is a slug, not the Firestore doc ID, so the poem has to be found by
+// listing the (small) poems collection rather than fetched by ID directly.
+async function fetchPoemBySlug(slug) {
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/poems`;
   const response = await fetch(url);
   if (!response.ok) return null;
   const data = await response.json();
-  return {
-    title: data.fields?.title?.stringValue,
-    excerpt: data.fields?.excerpt?.stringValue,
-  };
+  for (const doc of data.documents || []) {
+    const title = doc.fields?.title?.stringValue;
+    const storedSlug = doc.fields?.slug?.stringValue;
+    if (title && (storedSlug === slug || slugify(title) === slug)) {
+      return { title, excerpt: doc.fields?.excerpt?.stringValue };
+    }
+  }
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -36,7 +55,7 @@ export default async function handler(req, res) {
   let poem = null;
   if (id) {
     try {
-      poem = await fetchPoem(id);
+      poem = await fetchPoemBySlug(id);
     } catch {
       poem = null;
     }

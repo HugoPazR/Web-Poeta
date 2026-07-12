@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getCustomPoems, addView, sortPoemsByNewest } from '../utils/storage';
+import { getCustomPoems, addView, sortPoemsByNewest, getPoemSlug } from '../utils/storage';
 import { useEffect, useState } from 'react';
 import Reactions from '../components/Reactions';
 import Comments from '../components/Comments';
@@ -15,7 +15,7 @@ function formatDate(dateStr) {
 }
 
 export default function PoemPage() {
-  const { id } = useParams();
+  const { slug } = useParams();
   const navigate = useNavigate();
   const [allPoems, setAllPoems] = useState(null); // null while loading
 
@@ -27,7 +27,7 @@ export default function PoemPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const poem = allPoems ? allPoems.find((p) => p.id === id) : null;
+  const poem = allPoems ? allPoems.find((p) => getPoemSlug(p) === slug) : null;
   useDocumentTitle(poem?.title);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function PoemPage() {
   }
 
   const sortedPoems = sortPoemsByNewest(allPoems);
-  const currentIndex = sortedPoems.findIndex((p) => p.id === id);
+  const currentIndex = sortedPoems.findIndex((p) => getPoemSlug(p) === slug);
   const prevPoem = sortedPoems[currentIndex - 1];
   const nextPoem = sortedPoems[currentIndex + 1];
 
@@ -109,7 +109,7 @@ export default function PoemPage() {
         <nav className="mt-10 pt-6 border-t border-border-light" id="poem-navigation">
           <div className="grid grid-cols-2 gap-4">
             {prevPoem ? (
-              <Link to={`/poema/${prevPoem.id}`} className="group no-underline rounded-[8px] btn-secondary p-4 transition-colors duration-300" id="prev-poem-link">
+              <Link to={`/poema/${getPoemSlug(prevPoem)}`} className="group no-underline rounded-[8px] btn-secondary p-4 transition-colors duration-300" id="prev-poem-link">
                 <span className="text-xs text-ink-faint font-sans tracking-wide mb-2 flex items-center gap-2">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M19 12H6M12 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
@@ -124,7 +124,7 @@ export default function PoemPage() {
               <div />
             )}
             {nextPoem ? (
-              <Link to={`/poema/${nextPoem.id}`} className="group no-underline rounded-[8px] btn-secondary p-4 text-right transition-colors duration-300" id="next-poem-link">
+              <Link to={`/poema/${getPoemSlug(nextPoem)}`} className="group no-underline rounded-[8px] btn-secondary p-4 text-right transition-colors duration-300" id="next-poem-link">
                 <span className="text-xs text-ink-faint font-sans tracking-wide mb-2 flex items-center justify-end gap-2">
                   Siguiente
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">

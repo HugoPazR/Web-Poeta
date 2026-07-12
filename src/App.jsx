@@ -25,7 +25,7 @@ export default function App() {
             <div className="w-full max-w-8xl mx-auto page-padding">
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/poema/:id" element={<PoemPage />} />
+              <Route path="/poema/:slug" element={<PoemPage />} />
               <Route path="/sobre-mi" element={<AboutPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/login" element={<LoginPage />} />

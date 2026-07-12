@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { getPoemSlug } from '../utils/storage';
 
 function formatDate(dateStr) {
   const date = new Date(dateStr + 'T12:00:00');
@@ -19,7 +20,7 @@ export default function PoemCard({ poem, index, isNew, reactions = {} }) {
 
   return (
     <Link
-      to={`/poema/${poem.id}`}
+      to={`/poema/${getPoemSlug(poem)}`}
       className="group block no-underline w-full animate-fade-in-up focus:outline-none"
       style={{ animationDelay: `${index * 80}ms` }}
       id={`poem-card-${poem.id}`}

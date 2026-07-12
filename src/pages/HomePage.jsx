@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getAllReactions, getCachedPoems, getCachedReactions, getCustomPoems, sortPoemsByNewest } from '../utils/storage';
+import { getAllReactions, getCachedPoems, getCachedReactions, getCustomPoems, getPoemSlug, sortPoemsByNewest } from '../utils/storage';
 import PoemCard from '../components/PoemCard';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
@@ -82,7 +82,7 @@ export default function HomePage() {
                 <p className="font-poem text-xl md:text-2xl italic leading-relaxed text-ink-light">
                   &ldquo;{featured.excerpt}&rdquo;
                 </p>
-                <a href={`/poema/${featured.id}`} className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-accent no-underline">
+                <a href={`/poema/${getPoemSlug(featured)}`} className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-accent no-underline">
                   Abrir poema
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />

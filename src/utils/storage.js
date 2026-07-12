@@ -3,6 +3,8 @@
 // localStorage is kept as an offline cache/fallback for when Firebase isn't configured or a request fails.
 // Auth lives in Firebase Auth + the AuthContext (see src/context/AuthContext.jsx), not here.
 
+import { slugify } from './slug';
+
 const STORAGE_KEY_REACTIONS = 'letrasdepaz_reactions';
 const STORAGE_KEY_COMMENTS = 'letrasdepaz_comments';
 const STORAGE_KEY_POEMS = 'letrasdepaz_custom_poems';
@@ -270,25 +272,22 @@ export async function getAllViews() {
   return safeGetItem(STORAGE_KEY_VIEWS, {});
 }
 
-// Real per-day totals (summed across all poems) since tracking started, for the
-// "Lecturas en el tiempo" chart. Days before this feature shipped have no data.
-export async function getDailyViewTotals() {
+// Raw per-poem, per-day view records since daily tracking shipped — each entry is
+// { poemId, date: 'YYYY-MM-DD', views }. Days before this feature shipped have no data.
+// Used to build both the "reads over time" totals and "most-read poems this month".
+export async function getViewsDailyRaw() {
   const fb = await getFirebase();
   if (fb) {
     try {
       const docs = await fb.getCollection('views_daily');
-      const out = {};
-      for (const d of docs) {
-        if (!d.date) continue;
-        out[d.date] = (out[d.date] || 0) + (d.views || 0);
-      }
-      safeSetItem(STORAGE_KEY_VIEWS_DAILY, out);
-      return out;
+      safeSetItem(STORAGE_KEY_VIEWS_DAILY, docs);
+      return docs;
     } catch (e) {
-      console.warn('getDailyViewTotals: Firestore fetch failed, using local cache', e);
+      console.warn('getViewsDailyRaw: Firestore fetch failed, using local cache', e);
     }
   }
-  return safeGetItem(STORAGE_KEY_VIEWS_DAILY, {});
+  const cached = safeGetItem(STORAGE_KEY_VIEWS_DAILY, []);
+  return Array.isArray(cached) ? cached : [];
 }
 
 export async function addView(poemId) {
@@ -349,9 +348,25 @@ export async function getCustomPoems() {
 }
 
 export async function addCustomPoem({ title, body, excerpt }) {
+  const trimmedTitle = title.trim();
+
+  // Slugs power the poem's URL (e.g. /poema/soy-poeta). Older poems saved before this
+  // feature don't have a stored slug, so their effective slug is computed on the fly —
+  // include that here too, or a new poem's title could silently collide with one of theirs.
+  const existingPoems = await getCustomPoems();
+  const existingSlugs = new Set(existingPoems.map((p) => p.slug || slugify(p.title)));
+  const baseSlug = slugify(trimmedTitle) || 'poema';
+  let slug = baseSlug;
+  let suffix = 2;
+  while (existingSlugs.has(slug)) {
+    slug = `${baseSlug}-${suffix}`;
+    suffix++;
+  }
+
   const newPoem = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    title: title.trim(),
+    slug,
+    title: trimmedTitle,
     body: body.trim(),
     excerpt: excerpt?.trim() || body.trim().split('\n')[0].slice(0, 80) + '...',
     date: new Date().toISOString().split('T')[0],
@@ -393,6 +408,12 @@ export async function deleteCustomPoem(poemId) {
 export function getPoemTitle(poemId, allPoems) {
   const poem = allPoems.find((p) => p.id === poemId);
   return poem ? poem.title : 'Poema desconocido';
+}
+
+// The URL-facing identifier for a poem. Poems published before this feature shipped have
+// no stored `slug` field, so it's derived from the title on the fly for those.
+export function getPoemSlug(poem) {
+  return poem.slug || slugify(poem.title);
 }
 
 // Sample poems and older custom poems only have day-precision `date`, so same-day poems
