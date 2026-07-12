@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getReactions } from '../utils/storage';
 
 function formatDate(dateStr) {
   const date = new Date(dateStr + 'T12:00:00');
@@ -11,17 +9,7 @@ function formatDate(dateStr) {
   });
 }
 
-export default function PoemCard({ poem, index, isNew }) {
-  const [reactions, setReactions] = useState({});
-
-  useEffect(() => {
-    let cancelled = false;
-    getReactions(poem.id).then((data) => {
-      if (!cancelled) setReactions(data);
-    });
-    return () => { cancelled = true; };
-  }, [poem.id]);
-
+export default function PoemCard({ poem, index, isNew, reactions = {} }) {
   const totalReactions = Object.values(reactions).reduce((sum, n) => sum + n, 0);
   const topEmojis = Object.entries(reactions)
     .filter(([, count]) => count > 0)

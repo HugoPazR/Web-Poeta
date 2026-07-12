@@ -88,11 +88,17 @@ export async function getAllReactions() {
       const docs = await fb.getCollection('reactions');
       const out = {};
       for (const d of docs) out[d.poemId || d.id] = d.counts || {};
+      safeSetItem(STORAGE_KEY_REACTIONS, out);
       return out;
     } catch (e) {
       console.warn('getAllReactions: Firestore fetch failed, using local cache', e);
     }
   }
+  return safeGetItem(STORAGE_KEY_REACTIONS, {});
+}
+
+// Synchronous read of whatever reaction counts were cached on a previous visit.
+export function getCachedReactions() {
   return safeGetItem(STORAGE_KEY_REACTIONS, {});
 }
 
@@ -282,6 +288,12 @@ export async function addView(poemId) {
   safeSetItem(STORAGE_KEY_VIEWS, all);
 
   return fb ? getViews(poemId) : all[poemId];
+}
+
+// Synchronous read of whatever poems were cached on a previous visit, so the UI can render
+// them instantly instead of waiting on Firebase's init + first Firestore round-trip.
+export function getCachedPoems() {
+  return safeGetItem(STORAGE_KEY_POEMS, []);
 }
 
 // Custom poems (shared via Firestore)

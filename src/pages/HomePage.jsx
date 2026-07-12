@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getCustomPoems, sortPoemsByNewest } from '../utils/storage';
+import { getAllReactions, getCachedPoems, getCachedReactions, getCustomPoems, sortPoemsByNewest } from '../utils/storage';
 import PoemCard from '../components/PoemCard';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
@@ -9,15 +9,17 @@ export default function HomePage() {
   useDocumentTitle();
   const [query, setQuery] = useState('');
   const [now] = useState(() => Date.now());
-  const [allPoems, setAllPoems] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [allPoems, setAllPoems] = useState(() => sortPoemsByNewest(getCachedPoems()));
+  const [isLoading, setIsLoading] = useState(() => getCachedPoems().length === 0);
+  const [reactionsByPoem, setReactionsByPoem] = useState(() => getCachedReactions());
 
   useEffect(() => {
     let cancelled = false;
-    getCustomPoems().then((customPoems) => {
+    Promise.all([getCustomPoems(), getAllReactions()]).then(([customPoems, reactions]) => {
       if (cancelled) return;
       const combined = sortPoemsByNewest(customPoems);
       setAllPoems(combined);
+      setReactionsByPoem(reactions);
       setIsLoading(false);
     });
     return () => { cancelled = true; };
@@ -154,7 +156,7 @@ export default function HomePage() {
           <ul id="poems-list" className="poems-list pb-24">
             {visiblePoems.map((poem, i) => (
               <li key={poem.id} className="poem-list-item relative">
-                <PoemCard poem={poem} index={i} isNew={isNew(poem.date)} />
+                <PoemCard poem={poem} index={i} isNew={isNew(poem.date)} reactions={reactionsByPoem[poem.id]} />
               </li>
             ))}
           </ul>

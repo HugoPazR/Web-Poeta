@@ -15,9 +15,13 @@ async function init() {
   if (!hasConfig()) return null;
   if (!initPromise) {
     initPromise = (async () => {
-      const { initializeApp } = await import('firebase/app');
-      const { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, updatePassword, deleteUser, sendPasswordResetEmail } = await import('firebase/auth');
-      const { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, increment, query, where } = await import('firebase/firestore');
+      const [{ initializeApp }, authModule, firestoreModule] = await Promise.all([
+        import('firebase/app'),
+        import('firebase/auth'),
+        import('firebase/firestore'),
+      ]);
+      const { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, updatePassword, deleteUser, sendPasswordResetEmail } = authModule;
+      const { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, increment, query, where } = firestoreModule;
 
       const config = {
         apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
