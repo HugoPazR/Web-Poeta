@@ -32,10 +32,10 @@ export default function AboutPage() {
             <p className="font-poem text-[24px] leading-9">
               Bienvenidos a este rincón de calma. Soy un tejedor de palabras que encuentra en la poesía una forma de respirar más profundo.
             </p>
-            <p className="text-[16px] leading-8">
+            <p className="font-poem text-[24px] leading-9">
               Letras de Paz nació de la necesidad de crear un espacio alejado del ruido constante del mundo moderno. Un lugar donde los silencios importan tanto como las palabras, y donde los sentimientos complejos pueden encontrar un hogar sencillo.
             </p>
-            <p className="text-[16px] leading-8">
+            <p className="font-poem text-[24px] leading-9">
               Mis versos exploran la nostalgia, los pequeños detalles de la cotidianidad y las emociones universales que nos conectan en la distancia. Creo que un poema no está terminado hasta que alguien lo lee y lo hace suyo.
             </p>
             <p className="font-poem text-xl italic text-ink-muted">

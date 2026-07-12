@@ -53,8 +53,8 @@ export default function ContactPage() {
               <p className="font-poem text-lg text-ink-muted italic mb-4">
                 El formulario de contacto aún no está configurado.
               </p>
-              <a href="mailto:contacto@letrasdepaz.com" className="text-accent hover:underline text-sm font-sans">
-                Escribe directamente a contacto@letrasdepaz.com
+              <a href="mailto:contacto.letrasdepaz@gmail.com" className="text-accent hover:underline text-sm font-sans">
+                Escribe directamente a contacto.letrasdepaz@gmail.com
               </a>
             </div>
           ) : (

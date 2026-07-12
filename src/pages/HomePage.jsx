@@ -154,12 +154,7 @@ export default function HomePage() {
           <ul id="poems-list" className="poems-list pb-24">
             {visiblePoems.map((poem, i) => (
               <li key={poem.id} className="poem-list-item relative">
-                {isNew(poem.date) && (
-                  <span className="absolute top-3 right-4 z-10 bg-sage text-parchment text-[10px] tracking-[0.15em] uppercase px-3 py-1.5 rounded-full shadow-sm font-sans">
-                    Nuevo
-                  </span>
-                )}
-                <PoemCard poem={poem} index={i} />
+                <PoemCard poem={poem} index={i} isNew={isNew(poem.date)} />
               </li>
             ))}
           </ul>

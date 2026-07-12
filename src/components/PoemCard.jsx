@@ -11,7 +11,7 @@ function formatDate(dateStr) {
   });
 }
 
-export default function PoemCard({ poem, index }) {
+export default function PoemCard({ poem, index, isNew }) {
   const [reactions, setReactions] = useState({});
 
   useEffect(() => {
@@ -24,6 +24,7 @@ export default function PoemCard({ poem, index }) {
 
   const totalReactions = Object.values(reactions).reduce((sum, n) => sum + n, 0);
   const topEmojis = Object.entries(reactions)
+    .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([emoji]) => emoji);
@@ -50,8 +51,15 @@ export default function PoemCard({ poem, index }) {
                 {poem.title}
               </h3>
             </div>
-            <div className="ml-auto text-xs text-accent font-sans font-medium tracking-wide opacity-90 group-hover:opacity-100 mt-2 md:mt-0">
-              Leer →
+            <div className="ml-auto flex flex-col items-end gap-2 mt-2 md:mt-0">
+              <span className="text-xs text-accent font-sans font-medium tracking-wide opacity-90 group-hover:opacity-100">
+                Leer →
+              </span>
+              {isNew && (
+                <span className="bg-sage text-parchment text-[10px] tracking-[0.15em] uppercase px-3 py-1.5 rounded-full shadow-sm font-sans">
+                  Nuevo
+                </span>
+              )}
             </div>
           </div>
 

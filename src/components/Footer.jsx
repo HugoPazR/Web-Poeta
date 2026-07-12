@@ -28,8 +28,7 @@ export default function Footer() {
 
         <div>
           <h3 className="text-sm uppercase tracking-wider text-ink-faint font-sans mb-3">Contacto</h3>
-          <p className="text-sm text-ink">contacto@letrasdepaz.com</p>
-          <p className="text-xs text-ink-faint mt-2">Tel: +57 314 514 6335</p>
+          <p className="text-sm text-ink">contacto.letrasdepaz@gmail.com</p>
 
           <div className="mt-4 flex items-center gap-4">
             <a href="https://x.com/hugopazrojas1" target="_blank" rel="noreferrer" aria-label="X" className="text-ink-faint hover:text-accent transition-colors duration-300">
