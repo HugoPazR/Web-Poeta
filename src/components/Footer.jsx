@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import NewsletterSignup from './NewsletterSignup';
+import TermsModal from './TermsModal';
 
 export default function Footer() {
+  const [showTerms, setShowTerms] = useState(false);
+
   return (
     <footer className="border-t border-border-light bg-white/35">
       <div className="border-b border-border-light">
@@ -58,6 +62,11 @@ export default function Footer() {
             <li><Link to="/sobre-mi" className="hover:text-accent transition-colors duration-300">Sobre mí</Link></li>
             <li><Link to="/#poems-list" className="hover:text-accent transition-colors duration-300">Poemas</Link></li>
             <li><Link to="/contacto" className="hover:text-accent transition-colors duration-300">Contacto</Link></li>
+            <li>
+              <button type="button" onClick={() => setShowTerms(true)} className="hover:text-accent transition-colors duration-300">
+                Términos y Condiciones
+              </button>
+            </li>
           </ul>
         </div>
       </div>
@@ -67,6 +76,8 @@ export default function Footer() {
           © {new Date().getFullYear()} · Archivo poético personal y archivo de lecturas. · Diseñado por Hugo Paz
         </div>
       </div>
+
+      <TermsModal open={showTerms} onClose={() => setShowTerms(false)} />
     </footer>
   );
 }
