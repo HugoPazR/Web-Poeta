@@ -126,7 +126,7 @@ export default function RegisterPage() {
 
         <div className="paper-panel rounded-[8px] p-7 md:p-8 panel-accent shadow-md">
           <div className="accent-stripe" aria-hidden="true" />
-          <form onSubmit={handleRegister} noValidate className="space-y-4 flex flex-col">
+          <form onSubmit={handleRegister} noValidate className="space-y-4 flex-1">
             <div>
               <label htmlFor="register-name" className="block text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">
                 Nombre
