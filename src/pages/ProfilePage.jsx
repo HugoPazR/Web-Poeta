@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { setDocData, deleteDocData, changePassword, deleteAccount, updateDisplayName } from '../utils/firebaseClient';
 import { translateAuthError } from '../utils/authErrors';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 const COUNTRIES = [
   'Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan',
@@ -19,6 +20,7 @@ const COUNTRIES = [
 ];
 
 export default function ProfilePage() {
+  useDocumentTitle('Mi perfil');
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [name, setName] = useState('');

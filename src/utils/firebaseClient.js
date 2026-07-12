@@ -16,7 +16,7 @@ async function init() {
   if (!initPromise) {
     initPromise = (async () => {
       const { initializeApp } = await import('firebase/app');
-      const { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, updatePassword, deleteUser } = await import('firebase/auth');
+      const { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, updatePassword, deleteUser, sendPasswordResetEmail } = await import('firebase/auth');
       const { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, increment, query, where } = await import('firebase/firestore');
 
       const config = {
@@ -37,7 +37,7 @@ async function init() {
       return {
         auth: cachedAuth,
         firestore: cachedFirestore,
-        helpers: { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, updatePassword, deleteUser, doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, increment, query, where },
+        helpers: { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, updatePassword, deleteUser, sendPasswordResetEmail, doc, setDoc, getDoc, collection, getDocs, addDoc, deleteDoc, increment, query, where },
       };
     })().catch((e) => {
       console.warn('Firebase init failed', e);
@@ -106,6 +106,12 @@ export async function deleteAccount() {
   const ctx = await init();
   if (!ctx || !ctx.auth.currentUser) throw new Error('Firebase not configured or not signed in');
   await ctx.helpers.deleteUser(ctx.auth.currentUser);
+}
+
+export async function resetPassword(email) {
+  const ctx = await init();
+  if (!ctx) throw new Error('Firebase not configured');
+  await ctx.helpers.sendPasswordResetEmail(ctx.auth, email);
 }
 
 // --- Firestore helpers --------------------------------------------
@@ -196,4 +202,4 @@ export async function incrementFields(collectionName, docId, fieldDeltas) {
   return true;
 }
 
-export default { init, isEnabled, signUp, signIn, signOutUser, onAuthChanged, currentUser, updateDisplayName, changePassword, deleteAccount, setDocData, getDocData, addDocData, getCollection, getCollectionWhere, deleteDocData, incrementFields };
+export default { init, isEnabled, signUp, signIn, signOutUser, onAuthChanged, currentUser, updateDisplayName, changePassword, deleteAccount, resetPassword, setDocData, getDocData, addDocData, getCollection, getCollectionWhere, deleteDocData, incrementFields };

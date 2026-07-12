@@ -3,8 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { signIn } from '../utils/firebaseClient';
 import { translateAuthError } from '../utils/authErrors';
 import { ADMIN_EMAIL } from '../utils/constants';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export default function LoginPage() {
+  useDocumentTitle('Entrar');
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,6 +92,11 @@ export default function LoginPage() {
                 >
                   {showPassword ? 'Ocultar' : 'Ver'}
                 </button>
+              </div>
+              <div className="mt-2 text-right">
+                <Link to="/recuperar-contrasena" className="text-xs text-ink-faint hover:text-accent transition-colors font-sans">
+                  ¿Olvidaste tu contraseña?
+                </Link>
               </div>
             </div>
 

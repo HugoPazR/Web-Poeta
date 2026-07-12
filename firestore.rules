@@ -5,6 +5,60 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'poeta@letrasdepaz.com';
     }
 
+    // The five reaction emojis offered in the UI (src/data/poems.js) — keep in sync manually.
+    function isKnownEmoji(e) {
+      return e in ['❤️', '😢', '🔥', '🤍', '✨'];
+    }
+
+    // Matches the exact shape storage.js's addComment() writes: { id, poemId, name, text, timestamp }.
+    // Rejects anything else so malformed writes (e.g. name/text as a non-string) can't crash the
+    // Comments UI for every visitor, and caps sizes against spam/storage abuse.
+    function isValidComment(data) {
+      return data.keys().hasOnly(['id', 'poemId', 'name', 'text', 'timestamp'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 50
+        && data.poemId is string && data.poemId.size() > 0 && data.poemId.size() <= 100
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.timestamp is number;
+    }
+
+    // Matches { counts: { <emoji>: number } } from storage.js's addReaction()/incrementFields().
+    function isValidReactionCounts(data) {
+      return data.keys().hasOnly(['counts'])
+        && data.counts is map
+        && data.counts.keys().hasOnly(['❤️', '😢', '🔥', '🤍', '✨'])
+        && (!('❤️' in data.counts) || (data.counts['❤️'] is number && data.counts['❤️'] >= 0))
+        && (!('😢' in data.counts) || (data.counts['😢'] is number && data.counts['😢'] >= 0))
+        && (!('🔥' in data.counts) || (data.counts['🔥'] is number && data.counts['🔥'] >= 0))
+        && (!('🤍' in data.counts) || (data.counts['🤍'] is number && data.counts['🤍'] >= 0))
+        && (!('✨' in data.counts) || (data.counts['✨'] is number && data.counts['✨'] >= 0));
+    }
+
+    // Matches { poemId, emoji, timestamp } from storage.js's addReaction().
+    function isValidReactionLog(data) {
+      return data.keys().hasOnly(['poemId', 'emoji', 'timestamp'])
+        && data.poemId is string && data.poemId.size() > 0 && data.poemId.size() <= 100
+        && data.emoji is string && isKnownEmoji(data.emoji)
+        && data.timestamp is number;
+    }
+
+    // Matches { views: number } from storage.js's addView().
+    function isValidViews(data) {
+      return data.keys().hasOnly(['views'])
+        && data.views is number
+        && data.views >= 0
+        && data.views < 100000000;
+    }
+
+    // Matches { email, createdAt } from storage.js's subscribeToNewsletter(). The doc id
+    // must equal the email itself, which is what the client always sets it to.
+    function isValidSubscriber(data, id) {
+      return data.keys().hasOnly(['email', 'createdAt'])
+        && data.email is string && data.email == id
+        && data.email.matches('^\\S+@\\S+[.]\\S+$')
+        && data.createdAt is number;
+    }
+
     // Poems, comments, reactions and views are the public content of this poetry site,
     // so anyone can read them. Only the poet's own Firebase Auth account (verified via
     // the signed ID token, not just a client-side check) may publish/delete poems or
@@ -16,28 +70,35 @@ service cloud.firestore {
 
     match /comments/{commentId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if isValidComment(request.resource.data);
       allow update, delete: if isAdmin();
     }
 
     match /reactions/{poemId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isValidReactionCounts(request.resource.data);
     }
 
     match /reaction_log/{logId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if isValidReactionLog(request.resource.data);
     }
 
     match /views/{poemId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isValidViews(request.resource.data);
     }
 
     // Each account can only read/write its own profile document.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Newsletter signups: anyone can subscribe (or re-subscribe, which just updates the
+    // timestamp since the doc id is the email), but the list itself isn't publicly readable.
+    match /subscribers/{subscriberId} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isValidSubscriber(request.resource.data, subscriberId);
     }
   }
 }

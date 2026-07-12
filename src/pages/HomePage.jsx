@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { samplePoems } from '../data/poems';
 import { getCustomPoems, sortPoemsByNewest } from '../utils/storage';
 import PoemCard from '../components/PoemCard';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 const DAYS_FOR_NEW_BADGE = 7;
 
 export default function HomePage() {
+  useDocumentTitle();
   const [query, setQuery] = useState('');
   const [now] = useState(() => Date.now());
   const [allPoems, setAllPoems] = useState([]);
@@ -15,7 +16,7 @@ export default function HomePage() {
     let cancelled = false;
     getCustomPoems().then((customPoems) => {
       if (cancelled) return;
-      const combined = sortPoemsByNewest([...customPoems, ...samplePoems]);
+      const combined = sortPoemsByNewest(customPoems);
       setAllPoems(combined);
       setIsLoading(false);
     });
@@ -40,7 +41,7 @@ export default function HomePage() {
   return (
     <main className="bg-transparent min-h-screen">
       <section className="relative overflow-hidden" id="hero">
-        <div className="max-w-8xl mx-auto px-8 pt-18 md:pt-24 pb-12 md:pb-16 page-padding">
+        <div className="max-w-8xl mx-auto px-8 pt-10 md:pt-14 pb-8 md:pb-10 page-padding">
           <div className="grid lg:grid-cols-[1.08fr_0.92fr] gap-10 lg:gap-14 items-center">
             <div className="animate-fade-in-up">
               <h1 className="font-poem text-[50px] sm:text-[68px] lg:text-[86px] font-semibold text-ink leading-[0.92] tracking-normal max-w-3xl" style={{ paddingBottom: '0px', marginBottom: '15px' }}>
@@ -95,7 +96,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="max-w-8xl mx-auto px-10 page-padding py-10 md:py-12" style={{ paddingLeft: '48px', paddingRight: '48px', paddingTop: '30px', paddingBottom: '30px' }}>
+      <section className="max-w-8xl mx-auto px-10 page-padding py-8 md:py-10">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
           <div>
             <p className="text-[11px] tracking-[0.18em] uppercase text-sage font-semibold font-sans mb-3">
