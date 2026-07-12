@@ -227,7 +227,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <div className="flex items-start gap-3">
+              <div className="flex items-start justify-center gap-3 text-center">
                 <input
                   id="register-terms"
                   type="checkbox"
@@ -248,12 +248,12 @@ export default function RegisterPage() {
                 </label>
               </div>
               {fieldErrors.terms && (
-                <p role="alert" className="text-accent text-xs font-sans mt-1.5 animate-fade-in">{fieldErrors.terms}</p>
+                <p role="alert" className="text-accent text-xs font-sans mt-1.5 text-center animate-fade-in">{fieldErrors.terms}</p>
               )}
             </div>
 
             {recaptchaRequired && (
-              <div>
+              <div className="flex justify-center">
                 <Recaptcha ref={recaptchaRef} onChange={setRecaptchaToken} />
               </div>
             )}
