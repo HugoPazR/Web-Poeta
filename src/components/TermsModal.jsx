@@ -6,11 +6,6 @@ const sectionBody = 'text-ink-light text-[14px] leading-6 mb-3';
 export default function TermsModal({ open, onClose }) {
   return (
     <Modal open={open} onClose={onClose} title="Términos y Condiciones y Política de Privacidad">
-      <p className="text-xs text-ink-faint font-sans mb-6">
-        Este texto es una referencia general para un blog personal de poesía y no constituye asesoría legal.
-        No ha sido redactado ni revisado por un abogado; revísalo y ajústalo a tu jurisdicción real antes de confiar en él.
-      </p>
-
       <h3 className={sectionHeading}>Términos y Condiciones</h3>
 
       <p className={sectionBody}>
