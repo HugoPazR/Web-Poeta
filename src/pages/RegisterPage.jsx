@@ -8,13 +8,18 @@ import Recaptcha, { hasRecaptchaConfig } from '../components/Recaptcha';
 
 const MIN_PASSWORD_LENGTH = 8;
 
-// Returns a Spanish error message for the first unmet requirement, or null if the password is strong enough.
+const PASSWORD_RULES = [
+  { key: 'length', label: `Mínimo ${MIN_PASSWORD_LENGTH} caracteres`, test: (pw) => pw.length >= MIN_PASSWORD_LENGTH },
+  { key: 'letter', label: 'Una letra', test: (pw) => /[A-Za-z]/.test(pw) },
+  { key: 'number', label: 'Un número', test: (pw) => /[0-9]/.test(pw) },
+  { key: 'special', label: 'Un carácter especial', test: (pw) => /[^A-Za-z0-9]/.test(pw) },
+];
+
+// Returns a Spanish error message if the password fails any requirement, or null if it's strong enough.
 function getPasswordError(pw) {
-  if (pw.length < MIN_PASSWORD_LENGTH) return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`;
-  if (!/[A-Za-z]/.test(pw)) return 'La contraseña debe incluir al menos una letra.';
-  if (!/[0-9]/.test(pw)) return 'La contraseña debe incluir al menos un número.';
-  if (!/[^A-Za-z0-9]/.test(pw)) return 'La contraseña debe incluir al menos un carácter especial.';
-  return null;
+  return PASSWORD_RULES.some((rule) => !rule.test(pw))
+    ? 'Tu contraseña no cumple los requisitos de seguridad.'
+    : null;
 }
 
 export default function RegisterPage() {
@@ -170,12 +175,12 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <label htmlFor="register-password" className="block text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans">
-                  Contraseña
-                </label>
-                <small className="text-xs text-ink-faint font-sans text-right">Mín. {MIN_PASSWORD_LENGTH} caracteres, con letra, número y símbolo</small>
-              </div>
+              <label htmlFor="register-password" className="block text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">
+                Contraseña
+              </label>
+              <p className="text-xs text-ink-faint font-sans mb-2">
+                Crea una contraseña segura con letras, números y símbolos combinados.
+              </p>
               <div className="relative">
                 <input
                   id="register-password"
@@ -197,6 +202,23 @@ export default function RegisterPage() {
                   {showPassword ? 'Ocultar' : 'Ver'}
                 </button>
               </div>
+              <ul className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                {PASSWORD_RULES.map((rule) => {
+                  const met = rule.test(password);
+                  return (
+                    <li key={rule.key} className={`flex items-center gap-1.5 text-xs font-sans transition-colors duration-300 ${met ? 'text-sage' : 'text-ink-faint'}`}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="shrink-0">
+                        {met ? (
+                          <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : (
+                          <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" />
+                        )}
+                      </svg>
+                      {rule.label}
+                    </li>
+                  );
+                })}
+              </ul>
               {fieldErrors.password && (
                 <p role="alert" className="text-accent text-xs font-sans mt-1.5 animate-fade-in">{fieldErrors.password}</p>
               )}
