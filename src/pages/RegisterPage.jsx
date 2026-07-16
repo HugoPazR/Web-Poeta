@@ -6,7 +6,16 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import TermsModal from '../components/TermsModal';
 import Recaptcha, { hasRecaptchaConfig } from '../components/Recaptcha';
 
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 8;
+
+// Returns a Spanish error message for the first unmet requirement, or null if the password is strong enough.
+function getPasswordError(pw) {
+  if (pw.length < MIN_PASSWORD_LENGTH) return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+  if (!/[A-Za-z]/.test(pw)) return 'La contraseña debe incluir al menos una letra.';
+  if (!/[0-9]/.test(pw)) return 'La contraseña debe incluir al menos un número.';
+  if (!/[^A-Za-z0-9]/.test(pw)) return 'La contraseña debe incluir al menos un carácter especial.';
+  return null;
+}
 
 export default function RegisterPage() {
   useDocumentTitle('Crear cuenta');
@@ -44,8 +53,9 @@ export default function RegisterPage() {
 
     if (!name.trim() || !email.trim() || !password || !confirmPassword) return;
 
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setFieldErrors({ password: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+    const passwordError = getPasswordError(password);
+    if (passwordError) {
+      setFieldErrors({ password: passwordError });
       return;
     }
     if (password !== confirmPassword) {
@@ -101,7 +111,7 @@ export default function RegisterPage() {
     !email.trim() ||
     !password ||
     !confirmPassword ||
-    password.length < MIN_PASSWORD_LENGTH ||
+    Boolean(getPasswordError(password)) ||
     password !== confirmPassword ||
     !acceptedTerms ||
     (recaptchaRequired && !recaptchaToken) ||
@@ -164,7 +174,7 @@ export default function RegisterPage() {
                 <label htmlFor="register-password" className="block text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans">
                   Contraseña
                 </label>
-                <small className="text-xs text-ink-faint font-sans">Mínimo {MIN_PASSWORD_LENGTH} caracteres</small>
+                <small className="text-xs text-ink-faint font-sans text-right">Mín. {MIN_PASSWORD_LENGTH} caracteres, con letra, número y símbolo</small>
               </div>
               <div className="relative">
                 <input
