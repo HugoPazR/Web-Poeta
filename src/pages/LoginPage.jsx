@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { signIn } from '../utils/firebaseClient';
+import { signIn, getDocData } from '../utils/firebaseClient';
 import { translateAuthError } from '../utils/authErrors';
-import { ADMIN_EMAIL } from '../utils/constants';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export default function LoginPage() {
@@ -24,7 +23,8 @@ export default function LoginPage() {
 
     try {
       const user = await signIn(trimmedEmail, password);
-      navigate(user.email === ADMIN_EMAIL ? '/admin' : '/');
+      const adminDoc = await getDocData('admins', user.uid).catch(() => null);
+      navigate(adminDoc ? '/admin' : '/');
     } catch (err) {
       setError(translateAuthError(err));
       setIsSubmitting(false);

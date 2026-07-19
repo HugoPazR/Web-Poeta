@@ -1,8 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Admin status lives in its own collection instead of a hardcoded email, so more than
+    // one account can be an admin. Docs there are only ever created by the site owner
+    // directly in the Firebase Console (allow write: if false below) — never by the client
+    // SDK — so a user can never grant themselves admin by writing to their own profile.
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'poeta@letrasdepaz.com';
+      return request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     // The five reaction emojis offered in the UI (src/data/poems.js) — keep in sync manually.
@@ -107,6 +111,15 @@ service cloud.firestore {
     // Each account can only read/write its own profile document.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Whether a given account is an admin. Existence of the doc (id = the account's uid) is
+    // the only thing that matters — content can be empty. Only the account itself may read
+    // its own status (so the UI can show/hide the admin panel link); nobody may write via the
+    // client SDK, so the only way to add or remove an admin is manually in the Firebase Console.
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // Newsletter signups: anyone can subscribe (or re-subscribe, which just updates the

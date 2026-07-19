@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { isEnabled, onAuthChanged, getDocData } from '../utils/firebaseClient';
-import { ADMIN_EMAIL } from '../utils/constants';
 
 const AuthContext = createContext({ user: null, loading: true });
 
@@ -28,35 +27,28 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        // Set everything Firebase Auth already knows immediately — isAdmin must never wait
-        // on a network round-trip, or route guards that check it right after login/navigate
-        // can fire while it's still stale and bounce the user back out.
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName || firebaseUser.email,
-          isAdmin: firebaseUser.email === ADMIN_EMAIL,
-          birthdate: null,
-          phone: null,
-          gender: null,
-          country: null,
+        // isAdmin now lives in Firestore (the `admins` collection) instead of a hardcoded
+        // email, so it can't be known synchronously — unlike the old email check. Fetch it
+        // together with the profile doc and reveal `user` only once, so `loading` stays true
+        // until both resolve — a route guard that bails out early while loading never sees a
+        // stale `isAdmin: false` and bounces a real admin back to /login.
+        Promise.all([
+          getDocData('admins', firebaseUser.uid).catch(() => null),
+          getDocData('users', firebaseUser.uid).catch(() => null),
+        ]).then(([adminDoc, profile]) => {
+          if (cancelled) return;
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: profile?.name || firebaseUser.displayName || firebaseUser.email,
+            isAdmin: Boolean(adminDoc),
+            birthdate: profile?.birthdate || null,
+            phone: profile?.phone || null,
+            gender: profile?.gender || null,
+            country: profile?.country || null,
+          });
+          setLoading(false);
         });
-        setLoading(false);
-
-        // Merge in the Firestore profile once it arrives (display name override, extra fields).
-        getDocData('users', firebaseUser.uid)
-          .then((profile) => {
-            if (cancelled || !profile) return;
-            setUser((prev) => (prev && prev.uid === firebaseUser.uid ? {
-              ...prev,
-              name: profile.name || prev.name,
-              birthdate: profile.birthdate || null,
-              phone: profile.phone || null,
-              gender: profile.gender || null,
-              country: profile.country || null,
-            } : prev));
-          })
-          .catch(() => { /* fall back to Firebase Auth fields only */ });
       });
     })();
 
