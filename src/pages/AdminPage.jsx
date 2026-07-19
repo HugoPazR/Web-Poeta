@@ -208,12 +208,15 @@ export default function AdminPage() {
 
   // views_daily / reactions_daily only track activity from the day each feature shipped, so
   // the all-time totals (from `views` / `reactions`, tracked since day one) are usually higher
-  // than what the daily buckets can account for. Rather than showing a "Por mes" total that
-  // never adds up to "Total histórico", the untracked remainder is attributed to last calendar
-  // month, so the sums reconcile.
-  const now = new Date();
-  const lastMonthRef = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonthKey = `${lastMonthRef.getFullYear()}-${String(lastMonthRef.getMonth() + 1).padStart(2, '0')}`;
+  // than what the daily buckets can account for. That untracked remainder has no day-level
+  // timestamp, but it can't predate the earliest poem's publish date — so it's attributed to
+  // that month, rather than an arbitrary "last calendar month" (which would be wrong for a
+  // young site where all activity, tracked or not, happened in the current month).
+  const earliestPoemTimestamp = customPoems.length
+    ? Math.min(...customPoems.map((p) => p.createdAt || new Date(p.date).getTime()))
+    : 0; // no poems means no gap to attribute anyway (views/reactions totals are 0 too)
+  const earliestPoemDate = new Date(earliestPoemTimestamp);
+  const legacyGapMonthKey = `${earliestPoemDate.getFullYear()}-${String(earliestPoemDate.getMonth() + 1).padStart(2, '0')}`;
   const viewsLegacyGap = Math.max(0, historicalViewsTotal - Object.values(dailyViewTotals).reduce((a, b) => a + b, 0));
   const reactionsLegacyGap = Math.max(0, historicalReactionsTotal - Object.values(dailyReactionTotals).reduce((a, b) => a + b, 0));
 
@@ -223,7 +226,7 @@ export default function AdminPage() {
     const d = new Date(ts);
     return d.getFullYear() === selectedYear && d.getMonth() + 1 === selectedMonth;
   };
-  const isSelectedLastMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}` === lastMonthKey;
+  const isSelectedLegacyGapMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}` === legacyGapMonthKey;
 
   const monthlyComments = comments.filter((c) => isInSelectedMonth(c.timestamp));
   const monthlyReactionEvents = reactions.filter((r) => isInSelectedMonth(r.timestamp));
@@ -239,7 +242,7 @@ export default function AdminPage() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([id, count]) => ({ id, title: getPoemTitle(id, allPoemsForTitles), views: count }));
-  const monthlyTotalViews = Object.values(monthlyViewsByPoem).reduce((a, b) => a + b, 0) + (isSelectedLastMonth ? viewsLegacyGap : 0);
+  const monthlyTotalViews = Object.values(monthlyViewsByPoem).reduce((a, b) => a + b, 0) + (isSelectedLegacyGapMonth ? viewsLegacyGap : 0);
 
   // Net reactions (not raw click events) for the selected month — the real counter, matching
   // how "Total histórico" already computes its Reacciones card.
@@ -247,7 +250,7 @@ export default function AdminPage() {
   for (const [date, count] of Object.entries(dailyReactionTotals)) {
     if (isInSelectedMonth(new Date(`${date}T12:00:00`).getTime())) monthlyReactionsTracked += count;
   }
-  const monthlyReactionsTotal = monthlyReactionsTracked + (isSelectedLastMonth ? reactionsLegacyGap : 0);
+  const monthlyReactionsTotal = monthlyReactionsTracked + (isSelectedLegacyGapMonth ? reactionsLegacyGap : 0);
 
   const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -302,9 +305,9 @@ export default function AdminPage() {
     return out;
   };
 
-  // If browsing last calendar month, fold the untracked legacy views into day 1 so the
+  // If browsing the legacy-gap month, fold the untracked legacy views into day 1 so the
   // month's chart total matches the reconciled stat card above it.
-  const dailyViewTotalsForMonth = isSelectedLastMonth && viewsLegacyGap > 0
+  const dailyViewTotalsForMonth = isSelectedLegacyGapMonth && viewsLegacyGap > 0
     ? {
         ...dailyViewTotals,
         [`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`]:
@@ -378,13 +381,13 @@ export default function AdminPage() {
     lecturas: buildMonthlySeries(
       Object.entries(dailyViewTotals).map(([date, count]) => ({ timestamp: new Date(`${date}T12:00:00`).getTime(), value: count })),
       resumenYear,
-      { key: lastMonthKey, amount: viewsLegacyGap }
+      { key: legacyGapMonthKey, amount: viewsLegacyGap }
     ),
     comentarios: buildMonthlySeries(comments.map((c) => ({ timestamp: c.timestamp, value: 1 })), resumenYear),
     reacciones: buildMonthlySeries(
       Object.entries(dailyReactionTotals).map(([date, count]) => ({ timestamp: new Date(`${date}T12:00:00`).getTime(), value: count })),
       resumenYear,
-      { key: lastMonthKey, amount: reactionsLegacyGap }
+      { key: legacyGapMonthKey, amount: reactionsLegacyGap }
     ),
     suscriptores: buildMonthlySeries(subscribers.map((s) => ({ timestamp: s.createdAt, value: 1 })), resumenYear),
   };
