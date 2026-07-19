@@ -4,6 +4,7 @@ import PoemCard from '../components/PoemCard';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 const DAYS_FOR_NEW_BADGE = 7;
+const POEMS_PER_PAGE = 10;
 
 export default function HomePage() {
   useDocumentTitle();
@@ -12,6 +13,7 @@ export default function HomePage() {
   const [allPoems, setAllPoems] = useState(() => sortPoemsByNewest(getCachedPoems()));
   const [isLoading, setIsLoading] = useState(() => getCachedPoems().length === 0);
   const [reactionsByPoem, setReactionsByPoem] = useState(() => getCachedReactions());
+  const [rawPage, setRawPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +36,24 @@ export default function HomePage() {
       (p) => p.title.toLowerCase().includes(q) || p.body.toLowerCase().includes(q)
     );
   }, [allPoems, query]);
+
+  const totalPages = Math.max(1, Math.ceil(visiblePoems.length / POEMS_PER_PAGE));
+  const page = Math.min(rawPage, totalPages);
+
+  const pagePoems = useMemo(
+    () => visiblePoems.slice((page - 1) * POEMS_PER_PAGE, page * POEMS_PER_PAGE),
+    [visiblePoems, page]
+  );
+
+  const goToPage = (n) => {
+    setRawPage(n);
+    document.getElementById('poems-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleQueryChange = (value) => {
+    setQuery(value);
+    setRawPage(1);
+  };
 
   const isNew = (dateStr) => {
     const days = (now - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24);
@@ -114,7 +134,7 @@ export default function HomePage() {
               <input
                 type="search"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => handleQueryChange(e.target.value)}
                 placeholder="Buscar un poema o un verso..."
                 aria-label="Buscar poemas"
                 className="
@@ -130,7 +150,7 @@ export default function HomePage() {
               </svg>
               {query && (
                 <button
-                  onClick={() => setQuery('')}
+                  onClick={() => handleQueryChange('')}
                   aria-label="Limpiar búsqueda"
                   className="absolute right-3 top-1/2 -translate-y-1/2 grid h-8 w-8 place-items-center rounded-none text-ink-faint hover:text-ink hover:bg-parchment-warm transition-colors"
                 >
@@ -153,13 +173,52 @@ export default function HomePage() {
             <p className="font-poem text-xl text-ink-faint italic">Cargando poemas...</p>
           </div>
         ) : visiblePoems.length > 0 ? (
-          <ul id="poems-list" className="poems-list pb-24">
-            {visiblePoems.map((poem, i) => (
-              <li key={poem.id} className="poem-list-item relative">
-                <PoemCard poem={poem} index={i} isNew={isNew(poem.date)} reactions={reactionsByPoem[poem.id]} />
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul id="poems-list" className={`poems-list ${totalPages > 1 ? '' : 'pb-24'}`}>
+              {pagePoems.map((poem, i) => (
+                <li key={poem.id} className="poem-list-item relative">
+                  <PoemCard poem={poem} index={i} isNew={isNew(poem.date)} reactions={reactionsByPoem[poem.id]} />
+                </li>
+              ))}
+            </ul>
+
+            {totalPages > 1 && (
+              <nav aria-label="Paginación de poemas" className="flex items-center justify-center gap-2 pt-10 pb-24">
+                <button
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page === 1}
+                  className="rounded-none px-4 py-2.5 text-sm font-medium font-sans text-ink-faint hover:text-accent transition-colors duration-300 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-ink-faint bg-transparent border border-border"
+                >
+                  ← Anterior
+                </button>
+
+                <div className="flex items-center gap-1 mx-2">
+                  {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => goToPage(n)}
+                      aria-current={n === page ? 'page' : undefined}
+                      className={`h-9 w-9 grid place-items-center rounded-none text-sm font-medium font-sans transition-colors duration-300 ${
+                        n === page
+                          ? 'bg-accent text-parchment'
+                          : 'text-ink-faint hover:text-accent bg-transparent'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => goToPage(page + 1)}
+                  disabled={page === totalPages}
+                  className="rounded-none px-4 py-2.5 text-sm font-medium font-sans text-ink-faint hover:text-accent transition-colors duration-300 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-ink-faint bg-transparent border border-border"
+                >
+                  Siguiente →
+                </button>
+              </nav>
+            )}
+          </>
         ) : (
           <div className="pb-24 text-center animate-fade-in paper-panel rounded-[8px] p-10">
             <p className="font-poem text-2xl text-ink-muted italic mb-4">
@@ -168,7 +227,7 @@ export default function HomePage() {
                 : 'Ningún poema coincide con tu búsqueda.'}
             </p>
             {query && (
-              <button onClick={() => setQuery('')} className="text-accent text-sm hover:underline font-sans">
+              <button onClick={() => handleQueryChange('')} className="text-accent text-sm hover:underline font-sans">
                 Ver todos los poemas
               </button>
             )}
