@@ -64,6 +64,17 @@ service cloud.firestore {
         && id == (data.poemId + '_' + data.date);
     }
 
+    // Matches { poemId, date, count } from storage.js's addReaction() net-new-reaction daily
+    // bucket. Only written when a reaction is genuinely new (not a switch), so this reflects
+    // the real reaction counter, not every click. The doc id must be "<poemId>_<date>".
+    function isValidReactionsDaily(data, id) {
+      return data.keys().hasOnly(['poemId', 'date', 'count'])
+        && data.poemId is string && data.poemId.size() > 0 && data.poemId.size() <= 100
+        && data.date is string && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.count is number && data.count >= 0 && data.count < 100000000
+        && id == (data.poemId + '_' + data.date);
+    }
+
     // Matches { email, createdAt } from storage.js's subscribeToNewsletter(). The doc id
     // must equal the email itself, which is what the client always sets it to.
     function isValidSubscriber(data, id) {
@@ -106,6 +117,11 @@ service cloud.firestore {
     match /views_daily/{entryId} {
       allow read: if true;
       allow write: if isValidViewsDaily(request.resource.data, entryId);
+    }
+
+    match /reactions_daily/{entryId} {
+      allow read: if true;
+      allow write: if isValidReactionsDaily(request.resource.data, entryId);
     }
 
     // Each account can only read/write its own profile document.

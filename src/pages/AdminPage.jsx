@@ -8,6 +8,7 @@ import {
   deleteComment,
   getReactionLog,
   getAllReactions,
+  getReactionsDailyRaw,
   getAllViews,
   getViewsDailyRaw,
   getPoemTitle,
@@ -42,6 +43,7 @@ export default function AdminPage() {
   const [reactionCounts, setReactionCounts] = useState({});
   const [views, setViews] = useState({});
   const [viewsDailyRaw, setViewsDailyRaw] = useState([]);
+  const [reactionsDailyRaw, setReactionsDailyRaw] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [commentSearch, setCommentSearch] = useState('');
   const [chartRange, setChartRange] = useState(30); // days for the time-series chart
@@ -56,11 +58,12 @@ export default function AdminPage() {
   const [notifyStatus, setNotifyStatus] = useState(null);
 
   const loadData = async () => {
-    const [customPoemsData, commentsData, reactionLogData, reactionCountsData, viewsData, viewsDailyRawData, subscribersData] = await Promise.all([
+    const [customPoemsData, commentsData, reactionLogData, reactionCountsData, reactionsDailyRawData, viewsData, viewsDailyRawData, subscribersData] = await Promise.all([
       getCustomPoems(),
       getAllComments(),
       getReactionLog(),
       getAllReactions(),
+      getReactionsDailyRaw(),
       getAllViews(),
       getViewsDailyRaw(),
       getSubscribers(),
@@ -69,6 +72,7 @@ export default function AdminPage() {
     setComments(commentsData);
     setReactions(reactionLogData.slice().reverse()); // Newest first
     setReactionCounts(reactionCountsData);
+    setReactionsDailyRaw(reactionsDailyRawData);
     setViews(viewsData);
     setViewsDailyRaw(viewsDailyRawData);
     setSubscribers(subscribersData);
@@ -192,12 +196,34 @@ export default function AdminPage() {
     dailyViewTotals[d.date] = (dailyViewTotals[d.date] || 0) + (d.views || 0);
   }
 
+  // Per-day NET new-reaction totals (one per person per poem, not one per click/switch).
+  const dailyReactionTotals = {};
+  for (const d of reactionsDailyRaw) {
+    if (!d.date) continue;
+    dailyReactionTotals[d.date] = (dailyReactionTotals[d.date] || 0) + (d.count || 0);
+  }
+
+  const historicalViewsTotal = Object.values(views).reduce((a, b) => a + b, 0);
+  const historicalReactionsTotal = Object.values(reactionCounts).reduce((sum, counts) => sum + Object.values(counts).reduce((s, n) => s + n, 0), 0);
+
+  // views_daily / reactions_daily only track activity from the day each feature shipped, so
+  // the all-time totals (from `views` / `reactions`, tracked since day one) are usually higher
+  // than what the daily buckets can account for. Rather than showing a "Por mes" total that
+  // never adds up to "Total histórico", the untracked remainder is attributed to last calendar
+  // month, so the sums reconcile.
+  const now = new Date();
+  const lastMonthRef = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthKey = `${lastMonthRef.getFullYear()}-${String(lastMonthRef.getMonth() + 1).padStart(2, '0')}`;
+  const viewsLegacyGap = Math.max(0, historicalViewsTotal - Object.values(dailyViewTotals).reduce((a, b) => a + b, 0));
+  const reactionsLegacyGap = Math.max(0, historicalReactionsTotal - Object.values(dailyReactionTotals).reduce((a, b) => a + b, 0));
+
   // ─── "Por mes" filtering ───────────────────────────────────────────────
   const isInSelectedMonth = (ts) => {
     if (!ts) return false;
     const d = new Date(ts);
     return d.getFullYear() === selectedYear && d.getMonth() + 1 === selectedMonth;
   };
+  const isSelectedLastMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}` === lastMonthKey;
 
   const monthlyComments = comments.filter((c) => isInSelectedMonth(c.timestamp));
   const monthlyReactionEvents = reactions.filter((r) => isInSelectedMonth(r.timestamp));
@@ -213,7 +239,15 @@ export default function AdminPage() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([id, count]) => ({ id, title: getPoemTitle(id, allPoemsForTitles), views: count }));
-  const monthlyTotalViews = Object.values(monthlyViewsByPoem).reduce((a, b) => a + b, 0);
+  const monthlyTotalViews = Object.values(monthlyViewsByPoem).reduce((a, b) => a + b, 0) + (isSelectedLastMonth ? viewsLegacyGap : 0);
+
+  // Net reactions (not raw click events) for the selected month — the real counter, matching
+  // how "Total histórico" already computes its Reacciones card.
+  let monthlyReactionsTracked = 0;
+  for (const [date, count] of Object.entries(dailyReactionTotals)) {
+    if (isInSelectedMonth(new Date(`${date}T12:00:00`).getTime())) monthlyReactionsTracked += count;
+  }
+  const monthlyReactionsTotal = monthlyReactionsTracked + (isSelectedLastMonth ? reactionsLegacyGap : 0);
 
   const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -268,7 +302,16 @@ export default function AdminPage() {
     return out;
   };
 
-  const monthlyDailySeries = buildMonthDailySeries(dailyViewTotals, selectedYear, selectedMonth);
+  // If browsing last calendar month, fold the untracked legacy views into day 1 so the
+  // month's chart total matches the reconciled stat card above it.
+  const dailyViewTotalsForMonth = isSelectedLastMonth && viewsLegacyGap > 0
+    ? {
+        ...dailyViewTotals,
+        [`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`]:
+          (dailyViewTotals[`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`] || 0) + viewsLegacyGap,
+      }
+    : dailyViewTotals;
+  const monthlyDailySeries = buildMonthDailySeries(dailyViewTotalsForMonth, selectedYear, selectedMonth);
 
   const TimeSeriesChart = ({ data }) => {
     const width = 800; const height = 160; const pad = 12;
@@ -307,13 +350,16 @@ export default function AdminPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  const buildMonthlySeries = (events, year) => {
+  const buildMonthlySeries = (events, year, legacyGap) => {
     const totals = {};
     events.forEach(({ timestamp, value }) => {
       if (!timestamp) return;
       const key = monthKey(timestamp);
       totals[key] = (totals[key] || 0) + value;
     });
+    if (legacyGap && legacyGap.amount > 0) {
+      totals[legacyGap.key] = (totals[legacyGap.key] || 0) + legacyGap.amount;
+    }
     const out = [];
     for (let m = 0; m < 12; m++) {
       const d = new Date(year, m, 1);
@@ -331,17 +377,22 @@ export default function AdminPage() {
   const monthlySeriesByMetric = {
     lecturas: buildMonthlySeries(
       Object.entries(dailyViewTotals).map(([date, count]) => ({ timestamp: new Date(`${date}T12:00:00`).getTime(), value: count })),
-      resumenYear
+      resumenYear,
+      { key: lastMonthKey, amount: viewsLegacyGap }
     ),
     comentarios: buildMonthlySeries(comments.map((c) => ({ timestamp: c.timestamp, value: 1 })), resumenYear),
-    reacciones: buildMonthlySeries(reactions.map((r) => ({ timestamp: r.timestamp, value: 1 })), resumenYear),
+    reacciones: buildMonthlySeries(
+      Object.entries(dailyReactionTotals).map(([date, count]) => ({ timestamp: new Date(`${date}T12:00:00`).getTime(), value: count })),
+      resumenYear,
+      { key: lastMonthKey, amount: reactionsLegacyGap }
+    ),
     suscriptores: buildMonthlySeries(subscribers.map((s) => ({ timestamp: s.createdAt, value: 1 })), resumenYear),
   };
 
   const historicalTotals = {
-    lecturas: Object.values(views).reduce((a, b) => a + b, 0),
+    lecturas: historicalViewsTotal,
     comentarios: comments.length,
-    reacciones: Object.values(reactionCounts).reduce((sum, counts) => sum + Object.values(counts).reduce((s, n) => s + n, 0), 0),
+    reacciones: historicalReactionsTotal,
     suscriptores: subscribers.length,
   };
 
@@ -495,7 +546,7 @@ export default function AdminPage() {
             {/* Stats Cards */}
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Total Lecturas</h3>
-              <p className="text-4xl font-poem text-ink">{Object.values(views).reduce((a, b) => a + b, 0)}</p>
+              <p className="text-4xl font-poem text-ink">{historicalTotals.lecturas}</p>
             </div>
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Comentarios</h3>
@@ -503,7 +554,7 @@ export default function AdminPage() {
             </div>
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Reacciones</h3>
-              <p className="text-4xl font-poem text-ink">{Object.values(reactionCounts).reduce((sum, counts) => sum + Object.values(counts).reduce((s, n) => s + n, 0), 0)}</p>
+              <p className="text-4xl font-poem text-ink">{historicalTotals.reacciones}</p>
             </div>
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Suscriptores</h3>
@@ -676,7 +727,7 @@ export default function AdminPage() {
             </div>
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Reacciones</h3>
-              <p className="text-4xl font-poem text-ink">{monthlyReactionEvents.length}</p>
+              <p className="text-4xl font-poem text-ink">{monthlyReactionsTotal}</p>
             </div>
             <div className="bg-white border border-border rounded-[6px] p-6">
               <h3 className="text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">Suscriptores</h3>

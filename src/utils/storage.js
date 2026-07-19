@@ -13,6 +13,7 @@ const STORAGE_KEY_VIEWS_DAILY = 'letrasdepaz_views_daily';
 const STORAGE_KEY_LAST_SEEN = 'letrasdepaz_last_seen';
 const STORAGE_KEY_USER_REACTIONS = 'letrasdepaz_user_reactions';
 const STORAGE_KEY_REACTION_LOG = 'letrasdepaz_reaction_log';
+const STORAGE_KEY_REACTIONS_DAILY = 'letrasdepaz_reactions_daily';
 const DEVICE_REACTIONS_KEY = '_device';
 
 // YYYY-MM-DD in the visitor's local timezone.
@@ -123,10 +124,30 @@ export async function getReactionLog() {
   return safeGetItem(STORAGE_KEY_REACTION_LOG, []);
 }
 
+// Raw per-poem, per-day NET new-reaction records (unlike reaction_log, this only counts a
+// reaction once per person per poem — switching an existing reaction to a different emoji
+// doesn't add to it, since that doesn't change the net reaction total). Used to build
+// admin stats that reflect the real counter instead of every click event.
+export async function getReactionsDailyRaw() {
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      const docs = await fb.getCollection('reactions_daily');
+      safeSetItem(STORAGE_KEY_REACTIONS_DAILY, docs);
+      return docs;
+    } catch (e) {
+      console.warn('getReactionsDailyRaw: Firestore fetch failed, using local cache', e);
+    }
+  }
+  const cached = safeGetItem(STORAGE_KEY_REACTIONS_DAILY, []);
+  return Array.isArray(cached) ? cached : [];
+}
+
 export async function addReaction(poemId, emoji, userId) {
   const currentReaction = getUserReaction(poemId, userId);
   if (currentReaction === emoji) return getReactions(poemId);
 
+  const isNetNewReaction = !currentReaction;
   const deltas = { [emoji]: 1 };
   if (currentReaction) deltas[currentReaction] = -1;
 
@@ -140,6 +161,12 @@ export async function addReaction(poemId, emoji, userId) {
     try {
       await fb.addDocData('reaction_log', { poemId, emoji, timestamp: Date.now() });
     } catch { /* non-critical */ }
+    if (isNetNewReaction) {
+      try {
+        const date = todayDateStr();
+        await fb.incrementFields('reactions_daily', `${poemId}_${date}`, { poemId, date, count: 1 });
+      } catch { /* non-critical: only affects the "reactions over time" reconciliation */ }
+    }
   }
 
   // local cache (used as fallback + immediate optimistic value if Firestore is unavailable)
