@@ -1,7 +1,9 @@
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export default function AboutPage() {
-  useDocumentTitle('Sobre mí');
+  useDocumentTitle('Sobre mí', {
+    description: 'Conoce la voz detrás de Letras de Paz: un espacio de poesía sobre la nostalgia, la cotidianidad y las emociones que nos conectan.',
+  });
   return (
     <main className="max-w-6xl mx-auto px-10 page-padding py-8 md:py-10 animate-fade-in">
       <section className="grid lg:grid-cols-[0.82fr_1.18fr] gap-8 lg:gap-10 items-center">

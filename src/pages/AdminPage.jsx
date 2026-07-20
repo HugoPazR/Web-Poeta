@@ -23,7 +23,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { hasNotifyConfig, notifySubscriber } from '../utils/emailClient';
 
 export default function AdminPage() {
-  useDocumentTitle('Panel');
+  useDocumentTitle('Panel', { noindex: true });
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 

@@ -5,7 +5,7 @@ import { translateAuthError } from '../utils/authErrors';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export default function LoginPage() {
-  useDocumentTitle('Entrar');
+  useDocumentTitle('Entrar', { noindex: true });
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

@@ -20,7 +20,7 @@ const COUNTRIES = [
 ];
 
 export default function ProfilePage() {
-  useDocumentTitle('Mi perfil');
+  useDocumentTitle('Mi perfil', { noindex: true });
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [name, setName] = useState('');

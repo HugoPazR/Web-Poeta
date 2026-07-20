@@ -28,11 +28,38 @@ export default function PoemPage() {
   }, []);
 
   const poem = allPoems ? allPoems.find((p) => getPoemSlug(p) === slug) : null;
-  useDocumentTitle(poem?.title);
+  useDocumentTitle(poem?.title, { description: poem?.excerpt });
 
   useEffect(() => {
     if (poem) addView(poem.id);
   }, [poem]);
+
+  // Structured data (schema.org CreativeWork) so search engines understand this page is a
+  // poem, not generic text — separate from useDocumentTitle since it's a whole script tag,
+  // not a meta attribute to update in place.
+  useEffect(() => {
+    if (!poem) return undefined;
+
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.text = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'CreativeWork',
+      genre: 'Poem',
+      name: poem.title,
+      description: poem.excerpt,
+      text: poem.body,
+      datePublished: poem.date,
+      url: `https://letrasdepaz.com/poema/${slug}`,
+      image: 'https://letrasdepaz.com/assets/Logo_Letras_de_Paz.png',
+      inLanguage: 'es',
+      author: { '@type': 'Person', name: 'Letras de Paz' },
+      publisher: { '@type': 'Organization', name: 'Letras de Paz' },
+    });
+    document.head.appendChild(script);
+
+    return () => script.remove();
+  }, [poem, slug]);
 
   if (allPoems === null) {
     return (

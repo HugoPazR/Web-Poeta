@@ -7,7 +7,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 const GENERIC_SUCCESS_MSG = 'Si ese correo está registrado, te enviamos un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada (y spam).';
 
 export default function ForgotPasswordPage() {
-  useDocumentTitle('Recuperar contraseña');
+  useDocumentTitle('Recuperar contraseña', { noindex: true });
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState(null);

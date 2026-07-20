@@ -23,7 +23,7 @@ function getPasswordError(pw) {
 }
 
 export default function RegisterPage() {
-  useDocumentTitle('Crear cuenta');
+  useDocumentTitle('Crear cuenta', { noindex: true });
   const navigate = useNavigate();
   const recaptchaRef = useRef(null);
 

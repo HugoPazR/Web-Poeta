@@ -5,7 +5,9 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 const MAPS_EMBED_SRC = 'https://maps.google.com/maps?q=Valledupar%2C%20Cesar%2C%20Colombia&output=embed';
 
 export default function ContactPage() {
-  useDocumentTitle('Contacto');
+  useDocumentTitle('Contacto', {
+    description: 'Escríbeme tus impresiones, dudas o simplemente saluda. Un espacio para conectar sobre poesía, versos y letras.',
+  });
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
