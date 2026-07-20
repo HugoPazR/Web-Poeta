@@ -1,9 +1,9 @@
 {
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "has": [{ "type": "host", "value": "www.letrasdepaz.com" }],
-      "destination": "https://letrasdepaz.com/:path*",
+      "destination": "https://letrasdepaz.com/$1",
       "permanent": true
     }
   ],
