@@ -47,9 +47,9 @@ export default function TermsModal({ open, onClose }) {
       <h3 className={sectionHeading}>Política de Privacidad</h3>
 
       <p className={sectionBody}>
-        <strong>1. Datos que recopilamos.</strong> Nombre, correo electrónico y contraseña (gestionada por Firebase Authentication,
-        nunca almacenada en texto plano por este sitio), los comentarios y reacciones asociados a tu cuenta, y tu correo si te
-        suscribes al boletín.
+        <strong>1. Datos que recopilamos.</strong> Nombre, correo electrónico y contraseña (gestionada de forma segura por un
+        proveedor externo de autenticación, nunca almacenada en texto plano por este sitio), los comentarios y reacciones
+        asociados a tu cuenta, y tu correo si te suscribes al boletín.
       </p>
       <p className={sectionBody}>
         <strong>2. Cómo usamos tus datos.</strong> Para autenticarte, mostrar tu nombre en tus comentarios, enviarte el boletín
@@ -60,9 +60,10 @@ export default function TermsModal({ open, onClose }) {
         casilla de aceptación) y en el uso continuo del servicio.
       </p>
       <p className={sectionBody}>
-        <strong>4. Con quién compartimos datos.</strong> Usamos Firebase (Google) para autenticación y almacenamiento, EmailJS
-        para el envío de correos, y Google reCAPTCHA para verificar que los registros no sean automatizados. Cada uno de estos
-        proveedores se rige por sus propias políticas de privacidad.
+        <strong>4. Con quién compartimos datos.</strong> Trabajamos con proveedores externos especializados que nos ayudan a
+        operar el sitio: uno para la autenticación y el almacenamiento seguro de la información de tu cuenta, otro para el
+        envío de correos (boletín y respuestas de contacto), y otro para verificar que los registros no sean automatizados.
+        Cada uno de estos proveedores aplica sus propias medidas de seguridad y políticas de privacidad.
       </p>
       <p className={sectionBody}>
         <strong>5. Conservación de datos.</strong> Tus datos se conservan mientras tu cuenta esté activa y se eliminan si
