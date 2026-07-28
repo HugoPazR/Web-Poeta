@@ -417,6 +417,33 @@ export async function addCustomPoem({ title, body, excerpt }) {
   return newPoem;
 }
 
+// Slug is intentionally left untouched here even if the title changes — poem URLs are
+// shared, indexed by search engines, and listed in sitemap.xml, so keeping them stable
+// across edits matters more than the slug always matching the current title exactly.
+export async function updateCustomPoem(poemId, { title, body, excerpt }) {
+  const trimmedTitle = title.trim();
+  const trimmedBody = body.trim();
+  const updates = {
+    title: trimmedTitle,
+    body: trimmedBody,
+    excerpt: excerpt?.trim() || trimmedBody.split('\n')[0].slice(0, 80) + '...',
+  };
+
+  const fb = await getFirebase();
+  if (fb) {
+    try {
+      await fb.setDocData('poems', poemId, updates);
+    } catch (e) {
+      console.error('updateCustomPoem: Firestore update failed', e);
+    }
+  }
+
+  const poems = safeGetItem(STORAGE_KEY_POEMS, []);
+  const updated = poems.map((p) => (p.id === poemId ? { ...p, ...updates } : p));
+  safeSetItem(STORAGE_KEY_POEMS, updated);
+  return updated.find((p) => p.id === poemId);
+}
+
 export async function deleteCustomPoem(poemId) {
   const fb = await getFirebase();
   if (fb) {

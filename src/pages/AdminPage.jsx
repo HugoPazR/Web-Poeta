@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   addCustomPoem,
+  updateCustomPoem,
   getCustomPoems,
   deleteCustomPoem,
   getAllComments,
@@ -32,10 +33,11 @@ export default function AdminPage() {
   
   // Poem form state
   const [customPoems, setCustomPoems] = useState([]);
+  const [editingPoemId, setEditingPoemId] = useState(null); // null = writing a new poem
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [excerpt, setExcerpt] = useState('');
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   // Stats state
   const [comments, setComments] = useState([]);
@@ -94,17 +96,50 @@ export default function AdminPage() {
     navigate('/');
   };
 
-  const handlePublish = async (e) => {
-    e.preventDefault();
-    if (!title.trim() || !body.trim()) return;
-
-    const newPoem = await addCustomPoem({ title, body, excerpt: excerpt.trim() || undefined });
-    await loadData();
+  const resetPoemForm = () => {
+    setEditingPoemId(null);
     setTitle('');
     setBody('');
     setExcerpt('');
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+  };
+
+  const startNewPoem = () => {
+    resetPoemForm();
+    setActiveTab('write');
+  };
+
+  const startEditPoem = (poem) => {
+    setEditingPoemId(poem.id);
+    setTitle(poem.title);
+    setBody(poem.body);
+    setExcerpt(poem.excerpt || '');
+    setActiveTab('write');
+  };
+
+  const cancelEditPoem = () => {
+    resetPoemForm();
+    setActiveTab('dashboard');
+  };
+
+  const handleSubmitPoem = async (e) => {
+    e.preventDefault();
+    if (!title.trim() || !body.trim()) return;
+
+    if (editingPoemId) {
+      await updateCustomPoem(editingPoemId, { title, body, excerpt: excerpt.trim() || undefined });
+      await loadData();
+      resetPoemForm();
+      setSuccessMessage('Poema actualizado exitosamente.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      setActiveTab('dashboard');
+      return;
+    }
+
+    const newPoem = await addCustomPoem({ title, body, excerpt: excerpt.trim() || undefined });
+    await loadData();
+    resetPoemForm();
+    setSuccessMessage('Poema publicado exitosamente.');
+    setTimeout(() => setSuccessMessage(null), 3000);
     setActiveTab('dashboard');
 
     // Best-effort: notify subscribers. Never blocks or fails the publish itself.
@@ -134,6 +169,7 @@ export default function AdminPage() {
     if (window.confirm('¿Seguro que quieres eliminar este poema?')) {
       await deleteCustomPoem(id);
       await loadData();
+      if (editingPoemId === id) cancelEditPoem();
     }
   };
 
@@ -468,10 +504,10 @@ export default function AdminPage() {
               Dashboard
             </button>
             <button
-              onClick={() => setActiveTab('write')}
+              onClick={startNewPoem}
               className={`px-4 py-1.5 rounded-[3px] text-sm font-sans font-medium transition-colors duration-200 ${
-                activeTab === 'write' 
-                  ? 'bg-ink text-parchment' 
+                activeTab === 'write'
+                  ? 'bg-ink text-parchment'
                   : 'text-ink-faint hover:text-ink'
               }`}
             >
@@ -487,10 +523,10 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {(showSuccess || isNotifying || notifyStatus) && (
+      {(successMessage || isNotifying || notifyStatus) && (
         <div className="mb-8 px-5 py-4 rounded-[4px] bg-white border border-accent/30 animate-slide-down">
           <p className="text-sm text-accent font-sans">
-            Poema publicado exitosamente.
+            {successMessage}
           </p>
           {isNotifying && (
             <p className="text-xs text-ink-faint font-sans mt-1">Avisando a tus suscriptores...</p>
@@ -842,6 +878,12 @@ export default function AdminPage() {
                           {views[poem.id] || 0} vistas
                         </span>
                         <button
+                          onClick={() => startEditPoem(poem)}
+                          className="text-xs text-ink-faint hover:text-accent px-3 py-1.5 border border-border hover:border-accent/40 rounded-[4px] transition-colors font-sans"
+                        >
+                          Editar
+                        </button>
+                        <button
                           onClick={() => handleDeletePoem(poem.id)}
                           className="text-xs text-ink-faint hover:text-accent px-3 py-1.5 border border-border hover:border-accent/40 rounded-[4px] transition-colors font-sans"
                         >
@@ -854,8 +896,8 @@ export default function AdminPage() {
               ) : (
                 <div className="p-10 text-center text-ink-faint">
                   <p className="font-poem italic">Aún no has publicado poemas propios.</p>
-                  <button 
-                    onClick={() => setActiveTab('write')}
+                  <button
+                    onClick={startNewPoem}
                     className="mt-4 text-accent hover:underline text-sm font-sans"
                   >
                     Escribir el primero
@@ -913,7 +955,10 @@ export default function AdminPage() {
 
       {/* ─── TAB: WRITE ─── */}
       {activeTab === 'write' && (
-        <form onSubmit={handlePublish} className="animate-fade-in max-w-2xl mx-auto">
+        <form onSubmit={handleSubmitPoem} className="animate-fade-in max-w-2xl mx-auto">
+          <h2 className="font-poem text-2xl mb-6 text-ink">
+            {editingPoemId ? 'Editar poema' : 'Escribir un poema nuevo'}
+          </h2>
           <div className="space-y-6">
             <div>
               <label htmlFor="poem-title" className="block text-[11px] tracking-[0.14em] uppercase text-ink-faint font-sans mb-2">
@@ -960,13 +1005,22 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="flex justify-end mt-8">
+          <div className="flex justify-end gap-3 mt-8">
+            {editingPoemId && (
+              <button
+                type="button"
+                onClick={cancelEditPoem}
+                className="px-8 py-3.5 rounded-[5px] border border-border text-ink-faint text-sm font-sans font-medium tracking-wide hover:text-ink hover:border-accent/40 transition-colors duration-300"
+              >
+                Cancelar
+              </button>
+            )}
             <button
               type="submit"
               disabled={!title.trim() || !body.trim()}
               className="px-8 py-3.5 rounded-[5px] bg-ink text-parchment text-sm font-sans font-medium tracking-wide hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors duration-300"
             >
-              Publicar poema
+              {editingPoemId ? 'Guardar cambios' : 'Publicar poema'}
             </button>
           </div>
         </form>
