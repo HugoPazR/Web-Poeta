@@ -1,9 +1,36 @@
+import { useEffect } from 'react';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export default function AboutPage() {
   useDocumentTitle('Sobre mí', {
-    description: 'Conoce la voz detrás de Letras de Paz: un espacio de poesía sobre la nostalgia, la cotidianidad y las emociones que nos conectan.',
+    description: 'Hugo Rafael Paz Rojas (Hugo Paz Rojas), poeta nacido en Valledupar, Cesar. Dos veces segundo puesto en poesía en los Festivales Universitarios Regionales ASCUN.',
   });
+
+  // Person structured data (schema.org), so searches for "Hugo Paz Rojas" or
+  // "Hugo Rafael Paz Rojas" can surface this page as the poet's own profile.
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.text = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Person',
+      name: 'Hugo Rafael Paz Rojas',
+      alternateName: 'Hugo Paz Rojas',
+      jobTitle: 'Poeta',
+      description: 'Poeta nacido en Valledupar, Cesar. Dos veces segundo puesto en la modalidad de poesía de los Festivales Universitarios Regionales ASCUN.',
+      url: 'https://letrasdepaz.com/sobre-mi',
+      image: 'https://letrasdepaz.com/assets/Porfile.jpg',
+      birthPlace: { '@type': 'Place', name: 'Valledupar, Cesar, Colombia' },
+      sameAs: [
+        'https://x.com/hugopazrojas1',
+        'https://instagram.com/hugopazrojas',
+        'https://facebook.com/hugopazrojas',
+      ],
+    });
+    document.head.appendChild(script);
+    return () => script.remove();
+  }, []);
+
   return (
     <main className="max-w-6xl mx-auto px-10 page-padding py-8 md:py-10 animate-fade-in">
       <section className="grid lg:grid-cols-[0.82fr_1.18fr] gap-8 lg:gap-10 items-center">
@@ -33,6 +60,9 @@ export default function AboutPage() {
           <div className="space-y-6 text-ink-light">
             <p className="font-poem text-[24px] leading-9">
               Bienvenidos a este rincón de calma. Soy un tejedor de palabras que encuentra en la poesía una forma de respirar más profundo.
+            </p>
+            <p className="font-poem text-[24px] leading-9">
+              Mi nombre es Hugo Rafael Paz Rojas, un joven poeta nacido en Valledupar, Cesar — una ciudad que llevo tatuada en cada verso que escribo. He tenido la fortuna de participar en festivales de poesía donde mi trabajo ha sido reconocido, entre ellos dos segundos puestos en la modalidad de poesía de los Festivales Universitarios Regionales ASCUN.
             </p>
             <p className="font-poem text-[24px] leading-9">
               Letras de Paz nació de la necesidad de crear un espacio alejado del ruido constante del mundo moderno. Un lugar donde los silencios importan tanto como las palabras, y donde los sentimientos complejos pueden encontrar un hogar sencillo.

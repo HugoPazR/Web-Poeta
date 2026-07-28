@@ -53,7 +53,7 @@ export default function PoemPage() {
       url: `https://letrasdepaz.com/poema/${slug}`,
       image: 'https://letrasdepaz.com/assets/Logo_Letras_de_Paz.png',
       inLanguage: 'es',
-      author: { '@type': 'Person', name: 'Letras de Paz' },
+      author: { '@type': 'Person', name: 'Hugo Paz Rojas', url: 'https://letrasdepaz.com/sobre-mi' },
       publisher: { '@type': 'Organization', name: 'Letras de Paz' },
     });
     document.head.appendChild(script);
@@ -118,6 +118,10 @@ export default function PoemPage() {
         <div className="poem-body max-w-3xl mb-8 md:mb-10 first-letter:text-6xl md:first-letter:text-7xl first-letter:font-poem first-letter:text-accent first-letter:mr-1">
           {poem.body}
         </div>
+
+        <p className="max-w-3xl text-right font-poem italic text-lg text-ink-muted mb-6 md:mb-8">
+          — Hugo Paz Rojas
+        </p>
 
         <div className="mb-6 md:mb-8 text-sage">
           <svg width="86" height="19" viewBox="0 0 86 19" fill="none" aria-hidden="true">
