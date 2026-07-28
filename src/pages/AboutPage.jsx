@@ -52,7 +52,7 @@ export default function AboutPage() {
           <p className="text-[11px] tracking-[0.2em] uppercase text-sage font-semibold font-sans mb-4">
             Sobre mí
           </p>
-          <h1 className="font-poem text-[48px] md:text-[68px] font-semibold text-ink leading-[0.96] mb-8">
+          <h1 className="font-poem text-[48px] md:text-[68px] lg:text-[44px] xl:text-[52px] font-semibold text-ink leading-[0.96] mb-8 lg:whitespace-nowrap">
             La voz detrás de las letras
           </h1>
           <div className="editorial-rule mb-8" />
